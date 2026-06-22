@@ -1,0 +1,7 @@
+{
+  "name": "mundial-2026-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Dashboard de pronósticos del Mundial 2026 con datos en vivo (API-Football) sobre Vercel"
+}
