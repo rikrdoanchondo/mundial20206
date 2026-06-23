@@ -206,6 +206,21 @@
   .grp-leg{display:flex;gap:18px;flex-wrap:wrap;font-size:.72rem;color:var(--muted);margin-top:16px}
   .grp-leg span{display:inline-flex;align-items:center;gap:7px} .grp-leg i{width:10px;height:10px;border-radius:3px}
 
+  /* Mejores terceros */
+  .thirds-wrap{margin-top:18px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+  .thirds-head{display:flex;align-items:baseline;gap:10px;padding:13px 15px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,var(--surface-2),var(--surface));flex-wrap:wrap}
+  .thirds-head h3{font-family:'Oswald';font-weight:600;font-size:1.05rem;text-transform:uppercase;letter-spacing:.03em}
+  .thirds-head h3::before{content:"🥉 "}
+  .thirds-head span{font-size:.74rem;color:var(--muted)}
+  .thirds-table .th-rank{font-family:'JetBrains Mono';font-weight:700;text-align:center;color:var(--muted)}
+  .thirds-table tbody tr.q3in td:first-child::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--gold)}
+  .thirds-table tbody tr.q3out td:first-child::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--coral);opacity:.5}
+  .thirds-table tbody tr.q3out{opacity:.55}
+  .th-grp{font-size:.62rem;color:var(--muted);margin-left:6px;font-family:'JetBrains Mono'}
+  .th-status{text-align:center}
+  .th-ok{font-size:.6rem;font-weight:700;color:var(--gold);background:var(--gold-dim);border-radius:5px;padding:3px 7px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+  .th-out{font-size:.6rem;font-weight:700;color:var(--muted);background:var(--bg-2);border-radius:5px;padding:3px 7px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+
   /* Goleadores */
   .scorer-wrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
   .scorer-wrap table tbody td{text-align:left}
@@ -392,6 +407,10 @@
       <span><i style="background:var(--gold)"></i> 3.º entre los 8 mejores</span>
       <span><i style="background:var(--coral);opacity:.6"></i> 3.º fuera / eliminado</span>
       <span class="mono">PJ · GF–GC · DIF · PTS</span>
+    </div>
+    <div class="thirds-wrap">
+      <div class="thirds-head"><h3>Mejores terceros</h3><span id="thirdsMeta">Los 8 mejores 3.º clasifican a 16vos · se ordena por puntos, diferencia y goles</span></div>
+      <div id="thirdsBody"></div>
     </div>
   </section>
 
@@ -1032,6 +1051,33 @@ function renderStandings(){
     return `<div class="grp"><div class="grp-h"><span class="gname">Grupo <span>${g}</span></span><span class="gpj">${pj} jornada${pj!==1?'s':''}</span></div>
       <table><thead><tr><th class="tl">Equipo</th><th>PJ</th><th>GF–GC</th><th>DIF</th><th>PTS</th></tr></thead><tbody>${body}</tbody></table></div>`;
   }).join("");
+  renderThirds();
+}
+/* Ranking de los terceros lugares: los 8 mejores clasifican a 16vos */
+function thirdsRanked(){
+  const byG={};
+  for(const r of STATE.standings){ const g=grpName(r.group)||"—"; if(!/^[A-L]$/.test(g)) continue; (byG[g]=byG[g]||[]).push(r); }
+  const thirds=[];
+  for(const g in byG){ const rows=byG[g].slice().sort(cmpRow); if(rows[2]) thirds.push({g,row:rows[2]}); }
+  thirds.sort((x,y)=>cmpRow(x.row,y.row));
+  return thirds;
+}
+function renderThirds(){
+  const host=document.getElementById("thirdsBody"); if(!host) return;
+  const thirds=thirdsRanked();
+  const meta=document.getElementById("thirdsMeta");
+  if(!thirds.length){ host.innerHTML=`<div class="empty">Aún sin terceros definidos.</div>`; return; }
+  const played=thirds.filter(t=>(t.row.played||0)>0).length;
+  if(meta) meta.textContent=`Los 8 mejores 3.º clasifican a 16vos · ${thirds.length} grupos · ordenados por PTS, DIF y GF`;
+  const rows=thirds.map((t,i)=>{
+    const r=t.row, ab=toAbbr(r.team)||r.team, dif=(r.gf||0)-(r.ga||0), dc=dif>0?"pos":dif<0?"neg":"zero";
+    const inn=i<8;
+    return `<tr class="${inn?'q3in':'q3out'}"><td class="th-rank">${i+1}</td>
+      <td><div class="team"><span class="crest" style="background:${cl(ab)}"></span><span class="tn">${nm(ab)}</span><span class="th-grp">Gpo ${t.g}</span></div></td>
+      <td>${r.played||0}</td><td class="gf-cell">${r.gf||0}–${r.ga||0}</td><td class="dif ${dc}">${dif>0?'+':''}${dif}</td><td class="pts">${r.points||0}</td>
+      <td class="th-status">${inn?'<span class="th-ok">Clasifica ✓</span>':'<span class="th-out">Fuera</span>'}</td></tr>`;
+  }).join("");
+  host.innerHTML=`<table class="thirds-table"><thead><tr><th>#</th><th class="tl">Tercer lugar</th><th>PJ</th><th>GF–GC</th><th>DIF</th><th>PTS</th><th>16vos</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 function renderScorers(){
   const wrap=document.getElementById("scorerWrap"), meta=document.getElementById("scorerMeta");
