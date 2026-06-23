@@ -738,11 +738,39 @@ function computeQualification(standings){
 
 const KO_EXPECT={r32:16,r16:8,qf:4,sf:2,f:2};
 const KO_DATE={r32:"28 jun – 3 jul",r16:"4 – 7 jul",qf:"9 – 11 jul",sf:"14 – 15 jul",f:"19 jul"};
+/* Calcula la tabla de posiciones desde los partidos JUGADOS de fase de grupos.
+   Es la fuente real: refleja siempre los resultados, sin depender del endpoint de
+   standings de la API (que puede ir con retraso o no actualizarse al instante). */
+function standingsFromFixtures(fixtures,grpMap){
+  const rec={};
+  for(const f of (fixtures||[])){
+    if(!isDone(f.status)) continue;
+    const h=toAbbr(f.home), a=toAbbr(f.away); if(!h||!a) continue;
+    const hg=f.hg, ag=f.ag; if(hg==null||ag==null) continue;
+    const rs=String(f.round||"").toLowerCase();
+    const isGroup = rs.includes("group") || ["j1","j2","j3"].includes(parseRound(f.round));
+    if(!isGroup) continue;
+    const grp=grpMap[h]||grpMap[a]||"";
+    const H=rec[h]||(rec[h]={played:0,win:0,draw:0,lose:0,gf:0,ga:0,points:0,group:grp});
+    const A=rec[a]||(rec[a]={played:0,win:0,draw:0,lose:0,gf:0,ga:0,points:0,group:grp});
+    if(!H.group) H.group=grp; if(!A.group) A.group=grp;
+    H.played++; A.played++; H.gf+=hg; H.ga+=ag; A.gf+=ag; A.ga+=hg;
+    if(hg>ag){ H.win++; H.points+=3; A.lose++; }
+    else if(hg<ag){ A.win++; A.points+=3; H.lose++; }
+    else { H.draw++; A.draw++; H.points++; A.points++; }
+  }
+  const out=[];
+  for(const ab in rec){ const r=rec[ab]; out.push({group:r.group||"—",team:ab,teamId:null,rank:0,played:r.played,win:r.win,draw:r.draw,lose:r.lose,gf:r.gf,ga:r.ga,points:r.points}); }
+  return out;
+}
 function assemble(data){
-  const standings=(data.standings&&data.standings.length)?data.standings:SNAPSHOT_STANDINGS;
-  const R=buildRatings(standings);
+  const baseStand=(data.standings&&data.standings.length)?data.standings:SNAPSHOT_STANDINGS;
   const grpMap={};
-  for(const row of standings){ const ab=toAbbr(row.team); const g=grpName(row.group); if(ab&&g) grpMap[ab]=g; }
+  for(const row of baseStand){ const ab=toAbbr(row.team); const g=grpName(row.group); if(ab&&g) grpMap[ab]=g; }
+  // posiciones desde los partidos jugados; si aún no hay, usa la base (API/respaldo)
+  const fxStand=standingsFromFixtures(data.fixtures,grpMap);
+  const standings = fxStand.length ? fxStand : baseStand;
+  const R=buildRatings(standings);
   const matches=[];
   const koCount={r32:0,r16:0,qf:0,sf:0,f:0};
   for(const f of (data.fixtures||[])){
@@ -817,9 +845,9 @@ function renderDayFilter(){
     ${hasToday?`<button class="dayf-today" id="dayTodayBtn">Hoy</button>`:""}
     <button class="dayf-clear" id="dayClearBtn">Todos</button>`;
   const sel=document.getElementById("daySelect");
-  if(sel){ sel.value=activeDay; sel.onchange=e=>{activeDay=e.target.value;renderMatches();}; }
-  const tb=document.getElementById("dayTodayBtn"); if(tb) tb.onclick=()=>{activeDay="today";renderDayFilter();renderMatches();};
-  const cb=document.getElementById("dayClearBtn"); if(cb) cb.onclick=()=>{activeDay="all";renderDayFilter();renderMatches();};
+  if(sel){ sel.value=activeDay; sel.onchange=e=>{ activeDay=e.target.value; if(activeDay!=="all"&&activeRound==="pred") activeRound="all"; renderChips(); renderMatches(); }; }
+  const tb=document.getElementById("dayTodayBtn"); if(tb) tb.onclick=()=>{ activeDay="today"; if(activeRound==="pred") activeRound="all"; renderChips(); renderDayFilter(); renderMatches(); };
+  const cb=document.getElementById("dayClearBtn"); if(cb) cb.onclick=()=>{ activeDay="all"; renderDayFilter(); renderMatches(); };
 }
 function side(ab,cls){ return `<div class="side ${cls}"><span class="crest" style="background:${cl(ab)}"></span><span class="ab">${ab}</span></div>`; }
 function sideR(ab,cls){ return `<div class="side away ${cls}"><span class="ab">${ab}</span><span class="crest" style="background:${cl(ab)}"></span></div>`; }
