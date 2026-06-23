@@ -141,6 +141,7 @@
   .pred-review.mid .pr-bar i{background:var(--gold)} .pred-review.bad .pr-bar i{background:var(--coral)}
   .pr-acctx{font-size:.66rem;color:var(--ink-2)}
   .pr-fb{margin-top:9px;font-size:.76rem;line-height:1.45;color:var(--ink-2)}
+  .pred-review.live{border-style:dashed}
 
   .mc.locked{border-style:dashed;background:linear-gradient(180deg,var(--surface),var(--bg-2));opacity:.92}
   .mc.locked .lk-body{display:flex;align-items:center;gap:13px;padding:6px 0}
@@ -706,39 +707,50 @@ function sideR(ab,cls){ return `<div class="side away ${cls}"><span class="ab">$
 function outcomeOf(h,a){ return h>a?"1":h<a?"2":"X"; }
 function evalPrediction(m){
   if(!Array.isArray(m.ps)||m.hs==null||m.as==null) return null;
+  const live=m.s==="live";
   const psH=m.ps[0], psA=m.ps[1], hs=m.hs, as=m.as;
   const oPred=outcomeOf(psH,psA), oReal=outcomeOf(hs,as);
   const hit=oPred===oReal, exact=(psH===hs&&psA===as);
   const errGoals=Math.abs(psH-hs)+Math.abs(psA-as);
-  // probabilidad que el modelo asignó al resultado que realmente ocurrió
+  // probabilidad que el modelo asignó al resultado (final o parcial en vivo)
   let pReal=null;
   if(Array.isArray(m.p)) pReal = oReal==="1"?m.p[0] : oReal==="X"?m.p[1] : m.p[2];
-  // % de acierto: marcador exacto = 100; si acertó el ganador, baja según goles de error; si falló, bajo
+  // % de acierto: marcador exacto = 100; si acierta el ganador, baja según goles de error; si falla, bajo
   let acc;
   if(exact) acc=100;
   else if(hit) acc=Math.max(55, 92-errGoals*9);
   else acc=Math.max(8, 45-errGoals*7);
   acc=Math.round(acc);
-  const diff=100-acc; // % de diferencia entre el pronóstico y el resultado real
+  const diff=100-acc; // % de diferencia entre el pronóstico y el marcador
   const nameW = oReal==="1"?nm(m.h):oReal==="2"?nm(m.a):null;
   let fb, tone, label;
-  if(exact){ tone="ok"; label="Exacto"; fb=`Pronóstico exacto: el marcador ${psH}–${psA} se cumplió al pie de la letra.`; }
-  else if(hit && errGoals<=1){ tone="ok"; label="Ganador ✓"; fb = oReal==="X"?`Acertó el empate; el marcador real difirió por apenas un gol.`:`Acertó al ganador (${nameW}) y el marcador quedó muy cerca del estimado.`; }
-  else if(hit){ tone="mid"; label="Ganador ✓"; fb = oReal==="X"?`Acertó el empate, aunque con más goles de los previstos.`:`Acertó al ganador (${nameW}), pero el marcador real fue distinto al estimado.`; }
-  else { tone="bad"; label="Falló ✗"; fb = oReal==="X"?`El partido terminó en empate cuando el pronóstico daba un ganador.`:`Sorpresa: ganó ${nameW}, en contra de lo que anticipaba el pronóstico.`; }
-  return {psH,psA,hs,as,hit,exact,errGoals,pReal,acc,diff,fb,tone,label};
+  if(live){
+    // partido en curso: etiquetas provisionales, nunca "falló" definitivo
+    if(exact){ tone="ok"; label="Va clavado"; fb=`Marcador parcial idéntico al pronóstico (${psH}–${psA}); aún puede cambiar.`; }
+    else if(hit){ tone="ok"; label="Va según ✓"; fb = oReal==="X"?`El empate parcial coincide con el signo del pronóstico.`:`Por ahora el marcador favorece a ${nameW}, en línea con el pronóstico.`; }
+    else { tone="mid"; label="Va en contra"; fb = oReal==="X"?`Empate parcial cuando el pronóstico daba un ganador; partido abierto.`:`Por ahora gana ${nameW}, en contra del pronóstico; el partido sigue.`; }
+  } else {
+    if(exact){ tone="ok"; label="Exacto"; fb=`Pronóstico exacto: el marcador ${psH}–${psA} se cumplió al pie de la letra.`; }
+    else if(hit && errGoals<=1){ tone="ok"; label="Ganador ✓"; fb = oReal==="X"?`Acertó el empate; el marcador real difirió por apenas un gol.`:`Acertó al ganador (${nameW}) y el marcador quedó muy cerca del estimado.`; }
+    else if(hit){ tone="mid"; label="Ganador ✓"; fb = oReal==="X"?`Acertó el empate, aunque con más goles de los previstos.`:`Acertó al ganador (${nameW}), pero el marcador real fue distinto al estimado.`; }
+    else { tone="bad"; label="Falló ✗"; fb = oReal==="X"?`El partido terminó en empate cuando el pronóstico daba un ganador.`:`Sorpresa: ganó ${nameW}, en contra de lo que anticipaba el pronóstico.`; }
+  }
+  return {psH,psA,hs,as,hit,exact,errGoals,pReal,acc,diff,fb,tone,label,live};
 }
 function reviewBlock(m){
   const ev=evalPrediction(m); if(!ev) return "";
-  return `<div class="pred-review ${ev.tone}">
+  const resK = ev.live?"Parcial":"Resultado";
+  const accK = ev.live?"coincidencia":"acierto";
+  const probTx = ev.pReal!=null?` · el modelo dio ${ev.pReal}% a ${ev.live?"este marcador parcial":"el resultado real"}`:"";
+  return `<div class="pred-review ${ev.tone}${ev.live?" live":""}">
     <div class="pr-grid">
       <div class="pr-cell"><span class="pr-k">Pronóstico</span><span class="pr-v mono">${ev.psH}–${ev.psA}</span></div>
-      <div class="pr-cell"><span class="pr-k">Resultado</span><span class="pr-v mono">${ev.hs}–${ev.as}</span></div>
+      <div class="pr-cell"><span class="pr-k">${resK}</span><span class="pr-v mono">${ev.hs}–${ev.as}</span></div>
       <div class="pr-cell"><span class="pr-k">% diferencia</span><span class="pr-v mono">${ev.diff}%</span></div>
-      <div class="pr-cell"><span class="pr-k">Acierto</span><span class="pr-badge ${ev.tone}">${ev.label}</span></div>
+      <div class="pr-cell"><span class="pr-k">${ev.live?"Estado":"Acierto"}</span><span class="pr-badge ${ev.tone}">${ev.label}</span></div>
     </div>
-    <div class="pr-acc"><div class="pr-bar"><i style="width:${ev.acc}%"></i></div><span class="pr-acctx mono">${ev.acc}% acierto${ev.pReal!=null?` · el modelo dio ${ev.pReal}% al resultado real`:""}</span></div>
-    <div class="pr-fb">${ev.fb}</div>
+    <div class="pr-acc"><div class="pr-bar"><i style="width:${ev.acc}%"></i></div><span class="pr-acctx mono">${ev.acc}% ${accK}${probTx}</span></div>
+    <div class="pr-fb">${ev.live?'<b style="color:var(--gold)">Provisional · </b>':''}${ev.fb}</div>
   </div>`;
 }
 function matchCard(m){
@@ -747,7 +759,7 @@ function matchCard(m){
     const live=m.s==="live", hw=m.hs>m.as, aw=m.as>m.hs;
     const tag=live?`<span class="live-tag"><span class="d"></span>En vivo${m.elapsed?` ${m.elapsed}'`:""}</span>`:`<span class="final-tag">Final</span>`;
     const det=m.id?`<div class="mc-foot"><span>${m.city||"Mundial 2026"}</span><span class="det">Ver detalle →</span></div>`:"";
-    const rev=(m.s==="done")?reviewBlock(m):"";
+    const rev=reviewBlock(m);
     return `<div class="mc${m.id?' clickable':''}" ${m.id?`onclick="openMatch(${m.id})"`:""}><div class="mc-top"><div class="lhs"><span class="gtag">GR ${m.g}</span><span class="dtag">${m.d}</span></div>${tag}</div>
       <div class="matchup">${side(m.h,hw?'win':aw?'lose':'')}<div class="scorechip ${live?'liv':'fin'}">${m.hs}–${m.as}</div>${sideR(m.a,aw?'win':hw?'lose':'')}</div>${rev}${det}</div>`;
   }
