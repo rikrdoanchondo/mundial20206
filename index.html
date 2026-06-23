@@ -743,6 +743,9 @@ const KO_DATE={r32:"28 jun – 3 jul",r16:"4 – 7 jul",qf:"9 – 11 jul",sf:"14
    standings de la API (que puede ir con retraso o no actualizarse al instante). */
 function standingsFromFixtures(fixtures,grpMap){
   const rec={};
+  // siembra TODOS los equipos conocidos con registro en cero, para que cada grupo
+  // muestre sus 4 selecciones aunque alguna no haya jugado todavía
+  for(const ab in (grpMap||{})){ rec[ab]={played:0,win:0,draw:0,lose:0,gf:0,ga:0,points:0,group:grpMap[ab]}; }
   for(const f of (fixtures||[])){
     if(!isDone(f.status)) continue;
     const h=toAbbr(f.home), a=toAbbr(f.away); if(!h||!a) continue;
@@ -765,9 +768,12 @@ function standingsFromFixtures(fixtures,grpMap){
 }
 function assemble(data){
   const baseStand=(data.standings&&data.standings.length)?data.standings:SNAPSHOT_STANDINGS;
+  // grupos: parte del respaldo (las 48 selecciones completas) y sobreescribe con la API si la hay,
+  // para que la tabla siempre muestre los 4 equipos de cada grupo aunque alguno no haya jugado.
   const grpMap={};
-  for(const row of baseStand){ const ab=toAbbr(row.team); const g=grpName(row.group); if(ab&&g) grpMap[ab]=g; }
-  // posiciones desde los partidos jugados; si aún no hay, usa la base (API/respaldo)
+  for(const row of SNAPSHOT_STANDINGS){ const ab=toAbbr(row.team); const g=grpName(row.group); if(ab&&g) grpMap[ab]=g; }
+  if(data.standings&&data.standings.length){ for(const row of data.standings){ const ab=toAbbr(row.team); const g=grpName(row.group); if(ab&&g) grpMap[ab]=g; } }
+  // posiciones desde los partidos jugados (con todos los equipos sembrados en cero)
   const fxStand=standingsFromFixtures(data.fixtures,grpMap);
   const standings = fxStand.length ? fxStand : baseStand;
   const R=buildRatings(standings);
