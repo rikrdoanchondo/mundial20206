@@ -73,8 +73,15 @@ export default async function handler(req, res) {
       scorers,
     };
 
+    // Si hay algún partido en vivo, cachea muy poco en el CDN para que el marcador
+    // se actualice casi en tiempo real (el CDN sigue agrupando peticiones, así que
+    // la cuota de la API se mantiene protegida). Sin partidos en vivo, caché normal.
+    const LIVE_TTL = parseInt(process.env.CACHE_TTL_LIVE || "25", 10);
+    const LIVE_CODES = ["1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT", "SUSP"];
+    const hasLive = fixtures.some(f => LIVE_CODES.includes(String(f.status || "").toUpperCase()));
+    const effTTL = hasLive ? Math.min(LIVE_TTL, TTL) : TTL;
     const cc = fixtures.length > 0
-      ? `public, max-age=0, s-maxage=${TTL}, stale-while-revalidate=${TTL * 2}`
+      ? `public, max-age=0, s-maxage=${effTTL}, stale-while-revalidate=${effTTL * 2}`
       : "public, max-age=30";
     res.setHeader("cache-control", cc);
     return res.status(200).send(JSON.stringify(payload));
