@@ -772,7 +772,7 @@ function assemble(data){
   // para que la tabla siempre muestre los 4 equipos de cada grupo aunque alguno no haya jugado.
   const grpMap={};
   for(const row of SNAPSHOT_STANDINGS){ const ab=toAbbr(row.team); const g=grpName(row.group); if(ab&&g) grpMap[ab]=g; }
-  if(data.standings&&data.standings.length){ for(const row of data.standings){ const ab=toAbbr(row.team); const g=grpName(row.group); if(ab&&g) grpMap[ab]=g; } }
+  if(data.standings&&data.standings.length){ for(const row of data.standings){ const ab=toAbbr(row.team); const g=grpName(row.group); if(ab&&/^[A-L]$/.test(g)) grpMap[ab]=g; } } // solo grupos válidos A–L; ignora "Group Stage" u otros valores basura de la API
   // posiciones desde los partidos jugados (con todos los equipos sembrados en cero)
   const fxStand=standingsFromFixtures(data.fixtures,grpMap);
   const standings = fxStand.length ? fxStand : baseStand;
