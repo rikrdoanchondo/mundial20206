@@ -99,6 +99,8 @@
   .final-tag{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:var(--bg-2);border:1px solid var(--line);border-radius:5px;padding:3px 8px}
   .live-tag{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--gold);background:var(--gold-dim);border:1px solid rgba(242,179,71,.3);border-radius:5px;padding:3px 8px;display:inline-flex;align-items:center;gap:5px}
   .live-tag .d{width:6px;height:6px;border-radius:50%;background:var(--gold);animation:pulse 1.8s infinite}
+  .live-tag.paused{color:var(--sky);background:var(--sky-dim);border-color:rgba(86,179,240,.3)}
+  .live-tag.paused .d{background:var(--sky);animation:none}
 
   .matchup{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-bottom:12px}
   .side{display:flex;align-items:center;gap:8px;min-width:0}
@@ -108,8 +110,18 @@
   .scorechip{font-family:'JetBrains Mono';font-weight:700;font-size:1.05rem;background:var(--bg-2);border:1px solid var(--line);border-radius:7px;padding:4px 10px;white-space:nowrap;min-width:54px;text-align:center}
   .scorechip.pred{color:var(--ink-2);border-style:dashed} .scorechip.fin{color:var(--ink)} .scorechip.liv{color:var(--gold);border-color:rgba(242,179,71,.4)}
   .side.win .ab{color:var(--ink)} .side.lose .ab{color:var(--muted)}
-  .mc-foot{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:9px;border-top:1px solid var(--line);font-size:.7rem;color:var(--muted)}
-  .mc-foot .det{color:var(--sky);font-weight:600;display:inline-flex;align-items:center;gap:5px}
+  .mc-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding-top:9px;border-top:1px solid var(--line);font-size:.7rem;color:var(--muted)}
+  .mc-foot .det{color:var(--sky);font-weight:600;display:inline-flex;align-items:center;gap:5px;flex-shrink:0;white-space:nowrap}
+  .mc-venue{display:inline-flex;align-items:center;gap:5px;min-width:0;line-height:1.3}
+  .mc-venue svg{flex-shrink:0;opacity:.6}
+  .dtag .tm{color:var(--ink-2);font-weight:600;display:inline-flex;align-items:center;gap:3px}
+  .dtag .tm svg{opacity:.7;vertical-align:-1px}
+  .fb-row-2{margin-top:11px;padding-top:11px;border-top:1px solid var(--line);display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .dayf-label{font-size:.74rem;font-weight:600;color:var(--ink-2);display:inline-flex;align-items:center;gap:4px}
+  .dayf-select{font-family:'Inter';font-size:.78rem;font-weight:600;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:7px 11px;cursor:pointer;outline:none;max-width:300px}
+  .dayf-select:hover{border-color:var(--line-2)}
+  .dayf-today,.dayf-clear{font-family:'Inter';font-size:.74rem;font-weight:600;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:6px 12px;cursor:pointer;transition:.15s}
+  .dayf-today:hover,.dayf-clear:hover{border-color:var(--grass);color:var(--grass)}
 
   .probtrack{display:flex;height:9px;border-radius:6px;overflow:hidden;border:1px solid var(--line);background:var(--bg-2)}
   .probtrack i{display:block;height:100%}
@@ -304,7 +316,7 @@
   <section id="pronosticos">
     <div class="sec-head">
       <span class="sec-num">01</span><h2>Tabla de pronósticos</h2>
-      <span class="meta">Se recalcula en vivo · filtra por ronda o equipo</span>
+      <span class="meta">Se recalcula en vivo · filtra por ronda, día o equipo · ordenado por horario</span>
     </div>
     <div class="filterbar">
       <div class="fb-row">
@@ -314,6 +326,7 @@
           <input id="search" type="text" placeholder="Buscar equipo…" autocomplete="off">
         </div>
       </div>
+      <div class="fb-row fb-row-2" id="dayFilter"></div>
     </div>
     <div class="filter-info" id="filterInfo"></div>
     <div class="matchgrid" id="matchGrid"></div>
@@ -527,11 +540,31 @@ function parseRound(r){
 }
 function isDone(st){ return ["FT","AET","PEN","AWD","WO"].includes(String(st||"").toUpperCase()); }
 function isLive(st){ return ["1H","HT","2H","ET","BT","P","LIVE","INT","SUSP"].includes(String(st||"").toUpperCase()); }
+const MES_ES=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+const DIA_ES=["dom","lun","mar","mié","jue","vie","sáb"];
 function fmtDate(d){
   if(!d) return ""; if(!/\d{4}-\d{2}-\d{2}/.test(d)) return d;
-  const dt=new Date(d), me=["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
-  return dt.getDate()+" "+me[dt.getMonth()];
+  const dt=new Date(d);
+  return dt.getDate()+" "+MES_ES[dt.getMonth()];
 }
+/* Fecha del partido (ISO de la API o "11 jun" del respaldo) → timestamp ms (null si no se puede) */
+function fixtureTs(d){
+  if(!d) return null; const s=String(d);
+  if(/\d{4}-\d{2}-\d{2}/.test(s)){ const t=new Date(s).getTime(); return isNaN(t)?null:t; }
+  const m=s.match(/(\d{1,2})\s+([a-zé]{3,})/i);
+  if(m){ const dd=parseInt(m[1],10); const mi=MES_ES.indexOf(m[2].slice(0,3).toLowerCase()); if(mi>=0&&dd>=1) return new Date(2026,mi,dd,12,0,0).getTime(); }
+  return null;
+}
+/* Horario del partido en hora local; "" si el respaldo no trae hora */
+function fmtTime(d){
+  if(!d) return ""; const s=String(d);
+  if(!/\d{4}-\d{2}-\d{2}[T ]\d/.test(s)) return "";
+  const dt=new Date(s); if(isNaN(dt)) return "";
+  return dt.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+}
+function dayKeyTs(ts){ if(ts==null) return ""; const dt=new Date(ts); return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0"); }
+function dayLabelTs(ts){ if(ts==null) return ""; const dt=new Date(ts); return `${DIA_ES[dt.getDay()]} ${dt.getDate()} ${MES_ES[dt.getMonth()]}`; }
+function todayKey(){ const dt=new Date(); return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0"); }
 function noteFor(h,a){ return NOTES[h+"_"+a]||NOTES[a+"_"+h]||"Pronóstico calculado por nivel previo, forma reciente y estadísticas disponibles."; }
 
 /* ---- Estadísticas agregadas por equipo (de /api/match cacheados) ---- */
@@ -651,13 +684,15 @@ function assemble(data){
   for(const f of (data.fixtures||[])){
     const h=toAbbr(f.home), a=toAbbr(f.away), r=parseRound(f.round);
     const g=grpMap[h]||grpMap[a]||"—", dt=fmtDate(f.date);
-    const id=f.id??null, city=f.venueCity||null;
+    const id=f.id??null, city=f.venueCity||null, venue=f.venueName||null;
+    const tm=fmtTime(f.date), ts=fixtureTs(f.date);
+    const meta={id,city,venue,tm,ts,dayKey:dayKeyTs(ts),dayLabel:dayLabelTs(ts)};
     if(koCount[r]!==undefined) koCount[r]++;
     const prePr=(h&&a&&PRIORS[h]&&PRIORS[a])?predict(h,a,R):null; // pronóstico del modelo para comparar
-    if(isDone(f.status)){ matches.push({r,g,d:dt,h,a,s:"done",hs:f.hg,as:f.ag,id,city,ps:prePr?prePr.ps:null,p:prePr?prePr.p:null,c:prePr?prePr.c:null}); }
-    else if(isLive(f.status)){ matches.push({r,g,d:dt,h,a,s:"live",hs:f.hg??0,as:f.ag??0,id,city,elapsed:f.elapsed,ps:prePr?prePr.ps:null,p:prePr?prePr.p:null,c:prePr?prePr.c:null}); }
-    else if(h&&a&&PRIORS[h]&&PRIORS[a]){ const pr=predict(h,a,R); matches.push({r,g,d:dt,h,a,s:"pred",p:pr.p,ps:pr.ps,c:pr.c,usedStats:pr.usedStats,w:noteFor(h,a),sn:statNote(h,a,R),id,city}); }
-    else { matches.push({r,g,d:dt||(KO_DATE[r]||""),h:"?",a:"?",s:"lock"}); }
+    if(isDone(f.status)){ matches.push({r,g,d:dt,h,a,s:"done",hs:f.hg,as:f.ag,...meta,ps:prePr?prePr.ps:null,p:prePr?prePr.p:null,c:prePr?prePr.c:null}); }
+    else if(isLive(f.status)){ matches.push({r,g,d:dt,h,a,s:"live",hs:f.hg??0,as:f.ag??0,...meta,elapsed:f.elapsed,st:f.status,ps:prePr?prePr.ps:null,p:prePr?prePr.p:null,c:prePr?prePr.c:null}); }
+    else if(h&&a&&PRIORS[h]&&PRIORS[a]){ const pr=predict(h,a,R); matches.push({r,g,d:dt,h,a,s:"pred",p:pr.p,ps:pr.ps,c:pr.c,usedStats:pr.usedStats,w:noteFor(h,a),sn:statNote(h,a,R),...meta}); }
+    else { matches.push({r,g,d:dt||(KO_DATE[r]||""),h:"?",a:"?",s:"lock",...meta}); }
   }
   for(const r in KO_EXPECT){ const need=KO_EXPECT[r]-(koCount[r]||0); for(let i=0;i<need;i++) matches.push({r,g:"—",d:KO_DATE[r],h:"?",a:"?",s:"lock"}); }
   return {matches,standings,R};
@@ -674,11 +709,12 @@ function computeKPIs(matches,standings){
 
 /* ============================ STATE + RENDER ============================ */
 let STATE={matches:[],standings:[],scorers:[],qual:{},live:false,ts:Date.now(),R:{}};
-let activeRound="pred", query="";
+let activeRound="pred", query="", activeDay="all";
 let STATS_CACHE=loadStatsCache();
 
 const ROUNDS=[
   {k:"pred",label:"Pronósticos",star:true,test:m=>m.s==="pred"},
+  {k:"all",label:"Todos",test:m=>m.s!=="lock"},
   {k:"j1",label:"Jornada 1",test:m=>m.r==="j1"},
   {k:"j2",label:"Jornada 2",test:m=>m.r==="j2"},
   {k:"j3",label:"Jornada 3",test:m=>m.r==="j3"},
@@ -699,6 +735,27 @@ function renderChips(){
     c.onclick=()=>{activeRound=r.k;renderChips();renderMatches();};
     el.appendChild(c);
   });
+}
+function renderDayFilter(){
+  const el=document.getElementById("dayFilter"); if(!el) return;
+  // días distintos con partidos (excluye los bloqueados sin fecha)
+  const map={};
+  for(const m of STATE.matches){ if(m.ts==null||!m.dayKey) continue; const o=map[m.dayKey]||(map[m.dayKey]={label:m.dayLabel,n:0,ts:m.ts}); o.n++; }
+  const days=Object.entries(map).sort((a,b)=>a[1].ts-b[1].ts);
+  const tk=todayKey(), hasToday=!!map[tk];
+  // si el día activo ya no existe tras un refresh, vuelve a "Todos"
+  if(activeDay!=="all"&&activeDay!=="today"&&!map[activeDay]) activeDay="all";
+  let opts=`<option value="all">Todos los días</option>`;
+  if(hasToday) opts+=`<option value="today">📍 Hoy · ${map[tk].n}</option>`;
+  for(const [k,v] of days){ const pastTag=v.ts<Date.now()&&k!==tk?" (pasado)":""; opts+=`<option value="${k}">${v.label} · ${v.n}${pastTag}</option>`; }
+  el.innerHTML=`<span class="dayf-label">📅 Día:</span>
+    <select id="daySelect" class="dayf-select" aria-label="Filtrar por día">${opts}</select>
+    ${hasToday?`<button class="dayf-today" id="dayTodayBtn">Hoy</button>`:""}
+    <button class="dayf-clear" id="dayClearBtn">Todos</button>`;
+  const sel=document.getElementById("daySelect");
+  if(sel){ sel.value=activeDay; sel.onchange=e=>{activeDay=e.target.value;renderMatches();}; }
+  const tb=document.getElementById("dayTodayBtn"); if(tb) tb.onclick=()=>{activeDay="today";renderDayFilter();renderMatches();};
+  const cb=document.getElementById("dayClearBtn"); if(cb) cb.onclick=()=>{activeDay="all";renderDayFilter();renderMatches();};
 }
 function side(ab,cls){ return `<div class="side ${cls}"><span class="crest" style="background:${cl(ab)}"></span><span class="ab">${ab}</span></div>`; }
 function sideR(ab,cls){ return `<div class="side away ${cls}"><span class="ab">${ab}</span><span class="crest" style="background:${cl(ab)}"></span></div>`; }
@@ -753,38 +810,68 @@ function reviewBlock(m){
     <div class="pr-fb">${ev.live?'<b style="color:var(--gold)">Provisional · </b>':''}${ev.fb}</div>
   </div>`;
 }
+const VEN_IC='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-5.6-7-11a7 7 0 0 1 14 0c0 5.4-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>';
+const CLK_IC='<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+function venueText(m){ return [m.city,m.venue].filter(Boolean).join(" · "); }
+function dateTag(m){ return `<span class="dtag">${m.d||""}${m.tm?` · <span class="tm">${CLK_IC}${m.tm}</span>`:""}</span>`; }
+function venueFoot(m,withDetail){
+  const vt=venueText(m)||(withDetail?"Mundial 2026":"");
+  if(!vt) return "";
+  return `<div class="mc-foot"><span class="mc-venue">${VEN_IC}${vt}</span>${withDetail&&m.id?`<span class="det">Ver detalle →</span>`:""}</div>`;
+}
+/* Fase del partido en vivo: minuto, medio tiempo, pausa de hidratación, penales, etc. */
+function livePhase(m){
+  const st=String(m.st||"").toUpperCase();
+  const min=m.elapsed?` ${m.elapsed}'`:"";
+  if(st==="HT")   return {txt:"Medio tiempo", pause:true};
+  if(st==="BT")   return {txt:"Pausa de hidratación", pause:true};
+  if(st==="INT")  return {txt:`Interrumpido${min}`, pause:true};
+  if(st==="SUSP") return {txt:"Suspendido", pause:true};
+  if(st==="P")    return {txt:"Penales", pause:false};
+  if(st==="ET")   return {txt:`Tiempo extra${min}`, pause:false};
+  return {txt:`En vivo${min}`, pause:false};
+}
 function matchCard(m){
   if(m.s==="lock") return `<div class="mc locked"><div class="lk-body"><div class="lk-ic">🔒</div><div class="lk-tx"><b>Por definir</b><span>Se define al cerrar la fase previa · ${m.d||""}</span></div></div></div>`;
   if(m.s==="done"||m.s==="live"){
     const live=m.s==="live", hw=m.hs>m.as, aw=m.as>m.hs;
-    const tag=live?`<span class="live-tag"><span class="d"></span>En vivo${m.elapsed?` ${m.elapsed}'`:""}</span>`:`<span class="final-tag">Final</span>`;
-    const det=m.id?`<div class="mc-foot"><span>${m.city||"Mundial 2026"}</span><span class="det">Ver detalle →</span></div>`:"";
+    const lp=live?livePhase(m):null;
+    const tag=live?`<span class="live-tag${lp.pause?' paused':''}"><span class="d"></span>${lp.txt}</span>`:`<span class="final-tag">Final</span>`;
+    const foot=venueFoot(m,true);
     const rev=reviewBlock(m);
-    return `<div class="mc${m.id?' clickable':''}" ${m.id?`onclick="openMatch(${m.id})"`:""}><div class="mc-top"><div class="lhs"><span class="gtag">GR ${m.g}</span><span class="dtag">${m.d}</span></div>${tag}</div>
-      <div class="matchup">${side(m.h,hw?'win':aw?'lose':'')}<div class="scorechip ${live?'liv':'fin'}">${m.hs}–${m.as}</div>${sideR(m.a,aw?'win':hw?'lose':'')}</div>${rev}${det}</div>`;
+    return `<div class="mc${m.id?' clickable':''}" ${m.id?`onclick="openMatch(${m.id})"`:""}><div class="mc-top"><div class="lhs"><span class="gtag">GR ${m.g}</span>${dateTag(m)}</div>${tag}</div>
+      <div class="matchup">${side(m.h,hw?'win':aw?'lose':'')}<div class="scorechip ${live?'liv':'fin'}">${m.hs}–${m.as}</div>${sideR(m.a,aw?'win':hw?'lose':'')}</div>${rev}${foot}</div>`;
   }
   const [pH,pD,pA]=m.p, mx=Math.max(pH,pD,pA);
   const sb=m.usedStats?`<span class="why stat-note" style="border:none;padding:0;margin-top:6px">📊 <b>Con estadísticas</b> · ${m.sn||""}</span>`:(m.sn?`<span class="stat-note">${m.sn}</span>`:"");
-  return `<div class="mc"><div class="mc-top"><div class="lhs"><span class="gtag">GR ${m.g}</span><span class="dtag">${m.d}</span></div><span class="conf ${m.c.toLowerCase()}">${m.c}</span></div>
+  const foot=venueFoot(m,false);
+  return `<div class="mc"><div class="mc-top"><div class="lhs"><span class="gtag">GR ${m.g}</span>${dateTag(m)}</div><span class="conf ${m.c.toLowerCase()}">${m.c}</span></div>
     <div class="matchup">${side(m.h,'')}<div class="scorechip pred">${m.ps[0]}–${m.ps[1]}</div>${sideR(m.a,'')}</div>
     <div><div class="probtrack"><i class="pseg-h" style="width:${pH}%"></i><i class="pseg-d" style="width:${pD}%"></i><i class="pseg-a" style="width:${pA}%"></i></div>
     <div class="problabels"><span class="${pH===mx?'fav':''}"><span class="dot pseg-h"></span>${m.h} ${pH}%</span><span class="${pD===mx?'fav':''}"><span class="dot pseg-d"></span>X ${pD}%</span><span class="${pA===mx?'fav':''}"><span class="dot pseg-a"></span>${m.a} ${pA}%</span></div></div>
-    <div class="why"><span class="pred-mark">Pronóstico ${m.ps[0]}–${m.ps[1]}</span> · ${m.w}${sb}</div></div>`;
+    <div class="why"><span class="pred-mark">Pronóstico ${m.ps[0]}–${m.ps[1]}</span> · ${m.w}${sb}</div>${foot}</div>`;
 }
 function renderMatches(){
   const grid=document.getElementById("matchGrid"), info=document.getElementById("filterInfo");
   const rd=ROUNDS.find(r=>r.k===activeRound);
   let list=STATE.matches.filter(rd.test);
+  // filtro por día (hoy / un día concreto)
+  const tk=todayKey();
+  let dayTxt="";
+  if(activeDay==="today"){ list=list.filter(m=>m.dayKey===tk); dayTxt=" · hoy"; }
+  else if(activeDay!=="all"){ list=list.filter(m=>m.dayKey===activeDay); const any=list[0]; dayTxt=` · ${any?any.dayLabel:activeDay}`; }
   if(query) list=list.filter(m=>m.h&&((nm(m.h)+m.h).toLowerCase().includes(query)||(nm(m.a)+m.a).toLowerCase().includes(query)));
-  const labels={pred:"Pronósticos en juego",j1:"Jornada 1 · resultados",j2:"Jornada 2 · resultados y pronósticos",j3:"Jornada 3 · pronósticos",r32:"Dieciseisavos de final",r16:"Octavos de final",qf:"Cuartos de final",sf:"Semifinales",f:"Final"};
+  // ordenar por horario (fecha + hora); los partidos sin fecha van al final
+  list=list.slice().sort((a,b)=>((a.ts??Infinity)-(b.ts??Infinity)));
+  const labels={pred:"Pronósticos en juego",all:"Todos los partidos",j1:"Jornada 1 · resultados",j2:"Jornada 2 · resultados y pronósticos",j3:"Jornada 3 · pronósticos",r32:"Dieciseisavos de final",r16:"Octavos de final",qf:"Cuartos de final",sf:"Semifinales",f:"Final"};
   const live=STATE.live;
   const badge=live?`<span class="livebadge on"><span class="d"></span>En vivo · ${new Date(STATE.ts).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</span>`
                   :`<span class="livebadge off"><span class="d"></span>Datos del 19 jun · sin conexión a la API</span>`;
   const nStats=Object.keys(aggregateStats()).length;
   const sbadge=nStats?`<span class="statsbadge">📊 ${nStats} equipos con stats cargadas</span>`:"";
-  info.innerHTML=`${badge}${sbadge}<span><b>${labels[activeRound]}</b> — ${list.length} partido${list.length!==1?'s':''}${query?` · “${query}”`:''}</span>
+  info.innerHTML=`${badge}${sbadge}<span><b>${labels[activeRound]||"Partidos"}</b>${dayTxt} — ${list.length} partido${list.length!==1?'s':''}${query?` · “${query}”`:''}</span>
     <span class="refresh" id="refreshBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Actualizar</span>`;
-  grid.innerHTML=list.length?list.map(matchCard).join(""):`<div class="empty">Sin partidos para “${query}” en esta ronda.</div>`;
+  grid.innerHTML=list.length?list.map(matchCard).join(""):`<div class="empty">Sin partidos${query?` para “${query}”`:""}${activeDay!=="all"?" en el día elegido":" en esta ronda"}.</div>`;
   const rb=document.getElementById("refreshBtn"); if(rb) rb.onclick=()=>{rb.classList.add("spin");load(true).finally(()=>setTimeout(()=>{rb.classList.remove("spin");scheduleRefresh();},600));};
 }
 function renderKPIs(){
@@ -887,7 +974,7 @@ function renderProjected(){
     <div class="filter-info"><b>${teams.length}/32</b> selecciones proyectadas a la Ronda de 32 según las posiciones actuales. El bracket se arma solo cuando empiecen los partidos de eliminación.</div>
     <div class="proj-grid">${grid||'<div class="empty">Aún sin proyección.</div>'}</div>`;
 }
-function renderAll(){ renderStatusStrip(); renderKPIs(); renderChips(); renderMatches(); renderStandings(); renderScorers(); renderKO(); }
+function renderAll(){ renderStatusStrip(); renderKPIs(); renderChips(); renderDayFilter(); renderMatches(); renderStandings(); renderScorers(); renderKO(); }
 
 /* ============================ MATCH DETAIL ============================ */
 function loadStatsCache(){ try{ return JSON.parse(localStorage.getItem("mx2026_stats")||"{}"); }catch(e){ return {}; } }
