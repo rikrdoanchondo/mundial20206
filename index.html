@@ -642,16 +642,25 @@ function fixtureTs(d){
   if(m){ const dd=parseInt(m[1],10); const mi=MES_ES.indexOf(m[2].slice(0,3).toLowerCase()); if(mi>=0&&dd>=1) return new Date(2026,mi,dd,12,0,0).getTime(); }
   return null;
 }
-/* Horario del partido en hora local; "" si el respaldo no trae hora */
+/* Todo el manejo de horas se hace en zona Ciudad de México (CDMX), sin importar la zona del navegador */
+const CDMX_TZ='America/Mexico_City';
+/* Horario del partido en hora CDMX; "" si el respaldo no trae hora */
 function fmtTime(d){
   if(!d) return ""; const s=String(d);
   if(!/\d{4}-\d{2}-\d{2}[T ]\d/.test(s)) return "";
   const dt=new Date(s); if(isNaN(dt)) return "";
-  return dt.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+  return dt.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',timeZone:CDMX_TZ});
 }
-function dayKeyTs(ts){ if(ts==null) return ""; const dt=new Date(ts); return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0"); }
-function dayLabelTs(ts){ if(ts==null) return ""; const dt=new Date(ts); return `${DIA_ES[dt.getDay()]} ${dt.getDate()} ${MES_ES[dt.getMonth()]}`; }
-function todayKey(){ const dt=new Date(); return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0"); }
+/* Hora CDMX a partir de un timestamp (para el botón "En vivo" / actualizaciones) */
+function fmtClockCDMX(ts){ return new Date(ts).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',timeZone:CDMX_TZ}); }
+function dayKeyTs(ts){ if(ts==null) return ""; return new Intl.DateTimeFormat('en-CA',{timeZone:CDMX_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(ts)); }
+function dayLabelTs(ts){ if(ts==null) return ""; const dt=new Date(ts);
+  const wd=new Intl.DateTimeFormat('es-MX',{timeZone:CDMX_TZ,weekday:'short'}).format(dt).replace(/\./g,'');
+  const d=new Intl.DateTimeFormat('es-MX',{timeZone:CDMX_TZ,day:'numeric'}).format(dt);
+  const mo=new Intl.DateTimeFormat('es-MX',{timeZone:CDMX_TZ,month:'short'}).format(dt).replace(/\./g,'');
+  return `${wd} ${d} ${mo}`;
+}
+function todayKey(){ return new Intl.DateTimeFormat('en-CA',{timeZone:CDMX_TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()); }
 function noteFor(h,a){ return NOTES[h+"_"+a]||NOTES[a+"_"+h]||"Pronóstico calculado por nivel previo, forma reciente y estadísticas disponibles."; }
 
 /* ---- Estadísticas agregadas por equipo (de /api/match cacheados) ---- */
@@ -971,13 +980,19 @@ function cardEvents(m){
 function livePhase(m){
   const st=String(m.st||"").toUpperCase();
   const min=m.elapsed?` ${m.elapsed}'`:"";
-  if(st==="HT")   return {txt:"Medio tiempo", pause:true};
-  if(st==="BT")   return {txt:"Pausa de hidratación", pause:true};
-  if(st==="INT")  return {txt:`Interrumpido${min}`, pause:true};
-  if(st==="SUSP") return {txt:"Suspendido", pause:true};
-  if(st==="P")    return {txt:"Penales", pause:false};
-  if(st==="ET")   return {txt:`Tiempo extra${min}`, pause:false};
-  return {txt:`En vivo${min}`, pause:false};
+  switch(st){
+    case "HT":   return {txt:"Medio tiempo", pause:true};
+    case "BT":   return {txt:"Pausa de hidratación", pause:true};
+    case "INT":  return {txt:"Interrumpido", pause:true};
+    case "SUSP": return {txt:"Suspendido", pause:true};
+    case "P":
+    case "PEN":  return {txt:"Penales", pause:false};
+    case "ET":   return {txt:`Tiempo extra${min}`, pause:false};
+    case "1H":   return {txt:`1er tiempo${min}`, pause:false};
+    case "2H":   return {txt:`2do tiempo${min}`, pause:false};
+    case "LIVE": return {txt:`En vivo${min}`, pause:false};
+    default:     return {txt:`En vivo${min}`, pause:false};
+  }
 }
 function matchCard(m){
   if(m.s==="lock") return `<div class="mc locked"><div class="lk-body"><div class="lk-ic">🔒</div><div class="lk-tx"><b>Por definir</b><span>Se define al cerrar la fase previa · ${m.d||""}</span></div></div></div>`;
@@ -1014,7 +1029,7 @@ function renderMatches(){
   list=list.slice().sort((a,b)=>((a.ts??Infinity)-(b.ts??Infinity)));
   const labels={pred:"Pronósticos y partidos en vivo",live:"Partidos en vivo",all:"Todos los partidos",j1:"Jornada 1 · resultados",j2:"Jornada 2 · resultados y pronósticos",j3:"Jornada 3 · pronósticos",r32:"Dieciseisavos de final",r16:"Octavos de final",qf:"Cuartos de final",sf:"Semifinales",f:"Final"};
   const live=STATE.live;
-  const badge=live?`<span class="livebadge on"><span class="d"></span>En vivo · ${new Date(STATE.ts).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</span>`
+  const badge=live?`<span class="livebadge on"><span class="d"></span>En vivo · ${fmtClockCDMX(STATE.ts)} CDMX</span>`
                   :`<span class="livebadge off"><span class="d"></span>Datos del 19 jun · sin conexión a la API</span>`;
   const nStats=Object.keys(aggregateStats()).length;
   const sbadge=nStats?`<span class="statsbadge">📊 ${nStats} equipos con stats cargadas</span>`:"";
