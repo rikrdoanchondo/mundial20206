@@ -99,6 +99,7 @@ function simplifyFixture(f) {
     date: f?.fixture?.date ?? null,
     status: f?.fixture?.status?.short ?? "NS",
     elapsed: f?.fixture?.status?.elapsed ?? null,
+    extra: f?.fixture?.status?.extra ?? null, // minutos de compensación (el "+X" sobre los 90')
     round: f?.league?.round ?? "",
     venueCity: f?.fixture?.venue?.city ?? null,
     venueName: f?.fixture?.venue?.name ?? null,
