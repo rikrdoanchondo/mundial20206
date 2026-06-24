@@ -69,6 +69,10 @@
   .chip.active{background:var(--grass);color:#06140d;border-color:var(--grass)}
   .chip .cnt{font-family:'JetBrains Mono';font-size:.68rem;opacity:.7}
   .chip.star.active{background:var(--gold);border-color:var(--gold);color:#1a1205}
+  .chip.livechip{border-color:rgba(242,179,71,.5);color:var(--gold)}
+  .chip.livechip.active{background:var(--gold);border-color:var(--gold);color:#1a1205}
+  .chip.livechip .chip-d{width:7px;height:7px;border-radius:50%;background:var(--gold);animation:pulse 1.8s infinite}
+  .chip.livechip.active .chip-d{background:#1a1205;animation:none}
   .search{display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:7px 11px;min-width:190px}
   .search input{background:none;border:none;outline:none;color:var(--ink);font-family:'Inter';font-size:.82rem;width:100%}
   .search input::placeholder{color:var(--muted)} .search svg{flex-shrink:0;opacity:.55}
@@ -830,7 +834,8 @@ let activeRound="pred", query="", activeDay="all";
 let STATS_CACHE=loadStatsCache();
 
 const ROUNDS=[
-  {k:"pred",label:"Pronósticos",star:true,test:m=>m.s==="pred"},
+  {k:"pred",label:"Pronósticos",star:true,test:m=>m.s==="pred"||m.s==="live"},
+  {k:"live",label:"En vivo",live:true,test:m=>m.s==="live"},
   {k:"all",label:"Todos",test:m=>m.s!=="lock"},
   {k:"j1",label:"Jornada 1",test:m=>m.r==="j1"},
   {k:"j2",label:"Jornada 2",test:m=>m.r==="j2"},
@@ -844,11 +849,15 @@ const ROUNDS=[
 
 function renderChips(){
   const el=document.getElementById("chips"); el.innerHTML="";
+  const nLive=STATE.matches.filter(m=>m.s==="live").length;
+  // si la pestaña "En vivo" estaba activa pero ya no hay partidos en vivo, vuelve a Pronósticos
+  if(activeRound==="live"&&!nLive) activeRound="pred";
   ROUNDS.forEach(r=>{
-    const c=document.createElement("button");
-    c.className="chip"+(r.star?" star":"")+(r.k===activeRound?" active":"");
     const n=STATE.matches.filter(r.test).length;
-    c.innerHTML=`${r.label} <span class="cnt">${n}</span>`;
+    if(r.live&&!nLive) return; // el chip "En vivo" solo aparece cuando hay partidos en curso
+    const c=document.createElement("button");
+    c.className="chip"+(r.star?" star":"")+(r.live?" livechip":"")+(r.k===activeRound?" active":"");
+    c.innerHTML=`${r.live?'<span class="chip-d"></span>':''}${r.label} <span class="cnt">${n}</span>`;
     c.onclick=()=>{activeRound=r.k;renderChips();renderMatches();};
     el.appendChild(c);
   });
@@ -1003,7 +1012,7 @@ function renderMatches(){
   if(query) list=list.filter(m=>m.h&&((nm(m.h)+m.h).toLowerCase().includes(query)||(nm(m.a)+m.a).toLowerCase().includes(query)));
   // ordenar por horario (fecha + hora); los partidos sin fecha van al final
   list=list.slice().sort((a,b)=>((a.ts??Infinity)-(b.ts??Infinity)));
-  const labels={pred:"Pronósticos en juego",all:"Todos los partidos",j1:"Jornada 1 · resultados",j2:"Jornada 2 · resultados y pronósticos",j3:"Jornada 3 · pronósticos",r32:"Dieciseisavos de final",r16:"Octavos de final",qf:"Cuartos de final",sf:"Semifinales",f:"Final"};
+  const labels={pred:"Pronósticos y partidos en vivo",live:"Partidos en vivo",all:"Todos los partidos",j1:"Jornada 1 · resultados",j2:"Jornada 2 · resultados y pronósticos",j3:"Jornada 3 · pronósticos",r32:"Dieciseisavos de final",r16:"Octavos de final",qf:"Cuartos de final",sf:"Semifinales",f:"Final"};
   const live=STATE.live;
   const badge=live?`<span class="livebadge on"><span class="d"></span>En vivo · ${new Date(STATE.ts).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</span>`
                   :`<span class="livebadge off"><span class="d"></span>Datos del 19 jun · sin conexión a la API</span>`;
