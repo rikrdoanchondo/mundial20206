@@ -300,7 +300,7 @@
   .bm-zoom{display:inline-flex;gap:5px}
   .bm-zoom button{font-family:'Inter';font-weight:600;font-size:.78rem;color:var(--ink-2);background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:5px 11px;cursor:pointer;min-width:34px}
   .bm-zoom button:hover{border-color:var(--grass);color:var(--grass)}
-  .bm-wrap{border:1px solid var(--line);border-radius:14px;background:radial-gradient(900px 400px at 50% 0%,#0e1a15,var(--bg-2));overflow:hidden;box-shadow:var(--shadow)}
+  .bm-wrap{border:1px solid var(--line);border-radius:14px;background:radial-gradient(900px 400px at 50% 0%,#0e1a15,var(--bg-2));overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;max-height:min(72vh,600px);box-shadow:var(--shadow)}
   .bm-hint{font-size:.72rem;color:var(--muted);margin-top:9px;line-height:1.5}
   #bmSvg{display:block;-webkit-user-select:none;user-select:none}
   .bm-colh{font-family:'Oswald';font-weight:600;font-size:11px;letter-spacing:.04em;fill:var(--ink-2);text-transform:uppercase}
@@ -321,7 +321,7 @@
   #bmG.has-hl .bm-edge:not(.hl){opacity:.16}
   .bm-edge.hl{stroke:var(--gold);stroke-width:2.4}
   .bm-node.hl .bm-box{stroke:var(--gold);stroke-width:2}
-  @media(max-width:560px){ #bmSvg{height:440px!important} }
+  @media(max-width:560px){ .bm-wrap{max-height:64vh} }
 
   /* Modal detalle de partido */
   .modal{position:fixed;inset:0;z-index:60;background:rgba(5,10,8,.74);backdrop-filter:blur(4px);display:none;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto}
@@ -472,7 +472,7 @@
       </div>
     </div>
     <div class="bm-wrap" id="mapBody"></div>
-    <div class="bm-hint">Consejo: arrastra para desplazarte y usa la rueda del ratón (o los botones) para acercar. Pasa el cursor sobre una selección para resaltar su camino hacia la final.</div>
+    <div class="bm-hint">📱 En móvil: desliza con el dedo para moverte y pellizca para acercar. 🖥️ En escritorio: usa scroll para desplazarte, Ctrl + rueda (o los botones) para acercar, y pasa el cursor sobre una selección para resaltar su camino a la final.</div>
   </section>
 
   <footer>
@@ -1326,14 +1326,16 @@ function renderBracketMap(){
   nodesSvg+=`<g class="bm-champ${champAb?' won':''}"><rect x="${champX}" y="${champY-NH/2}" width="${NW}" height="${NH}" rx="9"/>
     <text x="${champX+NW/2}" y="${champY-4}" text-anchor="middle" class="bm-champ-l">🏆 CAMPEÓN</text>
     <text x="${champX+NW/2}" y="${champY+15}" text-anchor="middle" class="bm-champ-t" ${champAb?`fill="${cl(champAb)}"`:""}>${champAb?nm(champAb):"Por definir"}</text></g>`;
-  host.innerHTML=`<svg id="bmSvg" viewBox="0 0 ${totalW} ${totalH}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:${Math.min(600,totalH)}px;touch-action:pan-y"><g id="bmG">${edges}${heads}${nodesSvg}</g></svg>`;
-  setupBracketInteractions();
+  // El SVG se dimensiona en px (más grande que el contenedor) y el desplazamiento es scroll nativo:
+  // funciona con el dedo en móvil y con scroll/trackpad en escritorio. El zoom cambia ese tamaño.
+  host.innerHTML=`<svg id="bmSvg" viewBox="0 0 ${totalW} ${totalH}" width="${totalW}" height="${totalH}"><g id="bmG">${edges}${heads}${nodesSvg}</g></svg>`;
+  setupBracketInteractions(totalW,totalH);
 }
-function setupBracketInteractions(){
-  const svg=document.getElementById("bmSvg"), g=document.getElementById("bmG"); if(!svg||!g) return;
-  // clic en partido → detalle
+function setupBracketInteractions(totalW,totalH){
+  const wrap=document.getElementById("mapBody"), svg=document.getElementById("bmSvg"), g=document.getElementById("bmG"); if(!svg||!g||!wrap) return;
+  // clic / toque en partido → detalle
   g.querySelectorAll(".bm-node.clickable").forEach(n=>{ n.style.cursor="pointer"; n.addEventListener("click",ev=>{ ev.stopPropagation(); const id=parseInt(n.getAttribute("data-id"),10); if(id) openMatch(id); }); });
-  // resaltar trayectoria al pasar el cursor
+  // resaltar trayectoria (hover en escritorio; toque mantiene el resaltado en móvil)
   const nodes=[...g.querySelectorAll(".bm-node")], allEdges=[...g.querySelectorAll(".bm-edge")];
   function hl(team,on){
     g.classList.toggle("has-hl",on&&!!team);
@@ -1342,19 +1344,29 @@ function setupBracketInteractions(){
   }
   g.querySelectorAll(".bm-team").forEach(t=>{ const ab=t.getAttribute("data-team");
     t.addEventListener("mouseenter",()=>hl(ab,true)); t.addEventListener("mouseleave",()=>hl(ab,false)); });
-  // zoom y desplazamiento
-  let scale=1,tx=0,ty=0,drag=false,px=0,py=0;
-  const apply=()=>g.setAttribute("transform",`translate(${tx} ${ty}) scale(${scale})`);
-  const toVB=ev=>{ const p=svg.createSVGPoint(); p.x=ev.clientX; p.y=ev.clientY; const m=svg.getScreenCTM(); return m?p.matrixTransform(m.inverse()):{x:0,y:0}; };
-  svg.addEventListener("wheel",ev=>{ ev.preventDefault(); const f=ev.deltaY<0?1.12:1/1.12; const ns=Math.max(0.6,Math.min(4.5,scale*f)); const p=toVB(ev); tx=p.x-(ns/scale)*(p.x-tx); ty=p.y-(ns/scale)*(p.y-ty); scale=ns; apply(); },{passive:false});
-  svg.addEventListener("mousedown",ev=>{ drag=true; px=ev.clientX-tx; py=ev.clientY-ty; svg.style.cursor="grabbing"; });
-  window.addEventListener("mouseup",()=>{ if(drag){ drag=false; svg.style.cursor="grab"; } });
-  svg.addEventListener("mousemove",ev=>{ if(!drag) return; const k=svg.getScreenCTM(); const sc=k?k.a:1; tx=ev.clientX-px; ty=ev.clientY-py; apply(); });
-  const z=document.getElementById("bmZoom");
-  if(z){ z.querySelector("[data-z='in']").onclick=()=>{scale=Math.min(4.5,scale*1.2);apply();};
-    z.querySelector("[data-z='out']").onclick=()=>{scale=Math.max(0.6,scale/1.2);apply();};
-    z.querySelector("[data-z='reset']").onclick=()=>{scale=1;tx=0;ty=0;apply();}; }
-  svg.style.cursor="grab";
+  // ---- ZOOM (cambia el tamaño del SVG); el PANEO es scroll nativo del contenedor ----
+  const fitZoom=()=>Math.max(0.55,Math.min(1.25,(wrap.clientWidth-4)/totalW));
+  let zoom=fitZoom();
+  const apply=()=>{ svg.setAttribute("width",Math.round(totalW*zoom)); svg.setAttribute("height",Math.round(totalH*zoom)); };
+  apply();
+  const setZoom=(z,cx,cy)=>{ // cx,cy = punto focal en px dentro del contenedor (para hacer zoom hacia ahí)
+    const old=zoom; zoom=Math.max(0.4,Math.min(2.4,z));
+    const r=zoom/old;
+    apply();
+    if(cx!=null){ wrap.scrollLeft=(wrap.scrollLeft+cx)*r-cx; wrap.scrollTop=(wrap.scrollTop+cy)*r-cy; }
+  };
+  const zc=document.getElementById("bmZoom");
+  if(zc){ zc.querySelector("[data-z='in']").onclick=()=>setZoom(zoom*1.25,wrap.clientWidth/2,wrap.clientHeight/2);
+    zc.querySelector("[data-z='out']").onclick=()=>setZoom(zoom/1.25,wrap.clientWidth/2,wrap.clientHeight/2);
+    zc.querySelector("[data-z='reset']").onclick=()=>{ zoom=fitZoom(); apply(); wrap.scrollTo({left:0,top:0,behavior:'smooth'}); }; }
+  // pinch-zoom con dos dedos (móvil)
+  let pinchD=0, pinchCx=0, pinchCy=0;
+  const dist=t=>Math.hypot(t[0].clientX-t[1].clientX, t[0].clientY-t[1].clientY);
+  wrap.addEventListener("touchstart",ev=>{ if(ev.touches.length===2){ pinchD=dist(ev.touches); const rb=wrap.getBoundingClientRect(); pinchCx=(ev.touches[0].clientX+ev.touches[1].clientX)/2-rb.left; pinchCy=(ev.touches[0].clientY+ev.touches[1].clientY)/2-rb.top; } },{passive:true});
+  wrap.addEventListener("touchmove",ev=>{ if(ev.touches.length===2&&pinchD){ ev.preventDefault(); const d=dist(ev.touches); const f=d/pinchD; if(Math.abs(f-1)>0.015){ setZoom(zoom*f,pinchCx,pinchCy); pinchD=d; } } },{passive:false});
+  wrap.addEventListener("touchend",ev=>{ if(ev.touches.length<2) pinchD=0; });
+  // zoom con Ctrl/⌘ + rueda en escritorio (sin Ctrl, la rueda hace scroll normal)
+  wrap.addEventListener("wheel",ev=>{ if(!ev.ctrlKey&&!ev.metaKey) return; ev.preventDefault(); const rb=wrap.getBoundingClientRect(); setZoom(zoom*(ev.deltaY<0?1.12:1/1.12), ev.clientX-rb.left, ev.clientY-rb.top); },{passive:false});
 }
 function renderAll(){ renderStatusStrip(); renderKPIs(); renderChips(); renderDayFilter(); renderMatches(); renderStandings(); renderScorers(); renderKO(); renderBracketMap(); }
 
