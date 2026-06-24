@@ -94,16 +94,18 @@
   .refresh.done{color:var(--grass);border-color:var(--grass);background:var(--grass-dim);animation:rf-pop .55s ease}
   @keyframes rf-pop{0%{box-shadow:0 0 0 0 rgba(47,212,126,.55)}100%{box-shadow:0 0 0 9px rgba(47,212,126,0)}}
 
-  /* Toast "Datos actualizados" con balón */
-  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(22px);z-index:90;display:flex;align-items:center;gap:11px;background:var(--surface-2);border:1px solid var(--line-2);border-radius:40px;padding:11px 20px 11px 15px;box-shadow:0 20px 44px -16px rgba(0,0,0,.75);opacity:0;pointer-events:none;transition:opacity .3s ease,transform .35s cubic-bezier(.2,.9,.3,1.2)}
-  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  /* Toast central "Datos actualizados" con balón rodando de lado a lado */
+  .toast{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) scale(.88);z-index:90;display:flex;flex-direction:column;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--line-2);border-radius:20px;padding:22px 32px 24px;box-shadow:0 32px 72px -18px rgba(0,0,0,.82);opacity:0;pointer-events:none;transition:opacity .3s ease,transform .4s cubic-bezier(.2,.9,.3,1.3)}
+  .toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
   .toast.done{border-color:var(--grass);background:linear-gradient(180deg,var(--grass-dim),var(--surface-2))}
-  .toast-ball{font-size:1.35rem;display:inline-block;line-height:1;transform-origin:50% 50%;animation:ball-roll .85s linear infinite}
-  .toast.done .toast-ball{animation:ball-bounce .6s ease}
-  .toast-msg{font-size:.85rem;font-weight:700;color:var(--ink);letter-spacing:.01em}
+  .toast-track{position:relative;width:clamp(220px,62vw,340px);height:62px}
+  .toast-ball{position:absolute;top:50%;left:0;font-size:clamp(2.3rem,9vw,3.1rem);line-height:1;margin-top:-1.55rem;will-change:left,transform;animation:ball-across 1.15s ease-in-out infinite alternate;filter:drop-shadow(0 4px 6px rgba(0,0,0,.4))}
+  .toast.done .toast-ball{left:50%;margin-left:-1.55rem;animation:ball-bounce .65s ease}
+  .toast-msg{font-size:clamp(1rem,3.6vw,1.25rem);font-weight:800;color:var(--ink);letter-spacing:.01em}
   .toast.done .toast-msg{color:var(--grass)}
-  @keyframes ball-roll{to{transform:rotate(360deg)}}
-  @keyframes ball-bounce{0%{transform:translateY(0) scale(.5)}40%{transform:translateY(-9px) scale(1.25)}70%{transform:translateY(0) scale(1)}85%{transform:translateY(-4px)}100%{transform:translateY(0)}}
+  @keyframes ball-across{0%{left:0;transform:rotate(0deg)}100%{left:calc(100% - 3.1rem);transform:rotate(720deg)}}
+  @keyframes ball-bounce{0%{transform:translateY(0) scale(.4)}45%{transform:translateY(-16px) scale(1.3)}72%{transform:translateY(0) scale(1)}88%{transform:translateY(-6px)}100%{transform:translateY(0)}}
+  @media(prefers-reduced-motion:reduce){.toast-ball{animation:none!important;left:calc(50% - 1.55rem)!important}}
   .btn{display:inline-flex;align-items:center;gap:7px;font-size:.74rem;font-weight:600;color:var(--ink);background:var(--surface-2);border:1px solid var(--line-2);border-radius:9px;padding:8px 13px;cursor:pointer;transition:.15s}
   .btn:hover{border-color:var(--grass);color:var(--grass)} .btn:disabled{opacity:.5;cursor:default}
   .btn.gold{border-color:rgba(242,179,71,.4);color:var(--gold)} .btn.gold:hover{background:var(--gold-dim)}
@@ -482,9 +484,9 @@
   </div>
 </div>
 
-<!-- Toast de actualización -->
+<!-- Toast de actualización (centrado, balón rodando de lado a lado) -->
 <div class="toast" id="toast" role="status" aria-live="polite">
-  <span class="toast-ball">⚽</span>
+  <div class="toast-track"><span class="toast-ball">⚽</span></div>
   <span class="toast-msg">Datos actualizados</span>
 </div>
 
