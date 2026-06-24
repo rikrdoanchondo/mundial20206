@@ -1378,12 +1378,13 @@ let modalTab="stats";
 async function fetchMatch(id,opts){
   const live=!!(opts&&opts.live);
   const c=STATS_CACHE[id];
-  const ttl=live?40*1000:15*60*1000; // en vivo: refresca cada 40 s; terminado: 15 min
+  const ttl=live?18*1000:15*60*1000; // en vivo: refresca cada ~18 s (para que goles/tarjetas aparezcan pronto); terminado: 15 min
   const hasData=c&&c.data&&((Array.isArray(c.data.stats)&&c.data.stats.length)||(Array.isArray(c.data.events)&&c.data.events.length));
   const fresh=hasData&&(Date.now()-(c.ts||0)<ttl);
   if(fresh) return c.data;
   try{
-    const r=await fetch("/api/match?id="+id,{cache:"no-store"});
+    // ?live=1 indica al backend que use caché corta (no congelar el detalle por tener ya eventos)
+    const r=await fetch("/api/match?id="+id+(live?"&live=1":""),{cache:"no-store"});
     if(r.ok){ const j=await r.json(); if(j&&j.ok){ STATS_CACHE[id]={ts:Date.now(),data:j}; saveStatsCache(); return j; } }
   }catch(e){}
   return c&&c.data?c.data:null;

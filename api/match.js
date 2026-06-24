@@ -49,14 +49,17 @@ export default async function handler(req, res) {
     const events = extractEvents(evJson);
     const lineups = extractLineups(lnJson);
     const stats = extractStats(stJson);
-    const finished = stats.length > 0 || events.length > 0;
 
     const payload = { ok: true, id, ts: Date.now(), events, lineups, stats };
 
-    // Si ya hay estadísticas, el partido terminó: cachea fuerte. Si no, suave.
-    res.setHeader("cache-control", finished
-      ? "public, max-age=0, s-maxage=900, stale-while-revalidate=3600"
-      : "public, max-age=0, s-maxage=45, stale-while-revalidate=120");
+    // El cliente indica si el partido está EN VIVO (?live=1). Si lo está, cachea muy poco
+    // para que goles/tarjetas se actualicen casi al instante; si no, cachea fuerte (el
+    // detalle de un partido terminado no cambia). NO se infiere "terminado" por la mera
+    // existencia de eventos: un partido en vivo con gol también tiene eventos.
+    const isLive = String((req.query && req.query.live) || "") === "1";
+    res.setHeader("cache-control", isLive
+      ? "public, max-age=0, s-maxage=20, stale-while-revalidate=40"
+      : "public, max-age=0, s-maxage=900, stale-while-revalidate=3600");
     return res.status(200).send(JSON.stringify(payload));
   } catch (e) {
     res.setHeader("cache-control", "public, max-age=30");
