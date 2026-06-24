@@ -85,7 +85,25 @@
   .livebadge.off{color:var(--gold);background:var(--gold-dim);border-color:rgba(242,179,71,.3)} .livebadge.off .d{background:var(--gold)}
   .statsbadge{display:inline-flex;align-items:center;gap:6px;font-size:.7rem;font-weight:600;color:var(--violet);background:var(--violet-dim);border:1px solid rgba(176,139,255,.3);border-radius:40px;padding:4px 11px}
   .refresh{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:.72rem;color:var(--muted);background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:5px 10px;cursor:pointer}
-  .refresh:hover{color:var(--ink);border-color:var(--line-2)} .refresh svg{transition:transform .5s} .refresh.spin svg{transform:rotate(360deg)}
+  .refresh{font-weight:600}
+  .refresh:hover{color:var(--grass);border-color:var(--grass);background:var(--grass-dim)}
+  .refresh:active{transform:scale(.95)}
+  .refresh svg{transition:transform .4s}
+  .refresh.spin{color:var(--grass);border-color:var(--grass);background:var(--grass-dim);cursor:default}
+  .refresh.spin svg{animation:rot .7s linear infinite}
+  .refresh.done{color:var(--grass);border-color:var(--grass);background:var(--grass-dim);animation:rf-pop .55s ease}
+  @keyframes rf-pop{0%{box-shadow:0 0 0 0 rgba(47,212,126,.55)}100%{box-shadow:0 0 0 9px rgba(47,212,126,0)}}
+
+  /* Toast "Datos actualizados" con balón */
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(22px);z-index:90;display:flex;align-items:center;gap:11px;background:var(--surface-2);border:1px solid var(--line-2);border-radius:40px;padding:11px 20px 11px 15px;box-shadow:0 20px 44px -16px rgba(0,0,0,.75);opacity:0;pointer-events:none;transition:opacity .3s ease,transform .35s cubic-bezier(.2,.9,.3,1.2)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.done{border-color:var(--grass);background:linear-gradient(180deg,var(--grass-dim),var(--surface-2))}
+  .toast-ball{font-size:1.35rem;display:inline-block;line-height:1;transform-origin:50% 50%;animation:ball-roll .85s linear infinite}
+  .toast.done .toast-ball{animation:ball-bounce .6s ease}
+  .toast-msg{font-size:.85rem;font-weight:700;color:var(--ink);letter-spacing:.01em}
+  .toast.done .toast-msg{color:var(--grass)}
+  @keyframes ball-roll{to{transform:rotate(360deg)}}
+  @keyframes ball-bounce{0%{transform:translateY(0) scale(.5)}40%{transform:translateY(-9px) scale(1.25)}70%{transform:translateY(0) scale(1)}85%{transform:translateY(-4px)}100%{transform:translateY(0)}}
   .btn{display:inline-flex;align-items:center;gap:7px;font-size:.74rem;font-weight:600;color:var(--ink);background:var(--surface-2);border:1px solid var(--line-2);border-radius:9px;padding:8px 13px;cursor:pointer;transition:.15s}
   .btn:hover{border-color:var(--grass);color:var(--grass)} .btn:disabled{opacity:.5;cursor:default}
   .btn.gold{border-color:rgba(242,179,71,.4);color:var(--gold)} .btn.gold:hover{background:var(--gold-dim)}
@@ -464,6 +482,12 @@
   </div>
 </div>
 
+<!-- Toast de actualización -->
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <span class="toast-ball">⚽</span>
+  <span class="toast-msg">Datos actualizados</span>
+</div>
+
 <script>
 /* ============================ TEAMS ============================ */
 const T = {
@@ -839,7 +863,7 @@ function computeKPIs(matches,standings){
 
 /* ============================ STATE + RENDER ============================ */
 let STATE={matches:[],standings:[],scorers:[],qual:{},live:false,ts:Date.now(),R:{}};
-let activeRound="pred", query="", activeDay="all";
+let activeRound="pred", query="", activeDay="all", _refreshing=false;
 let STATS_CACHE=loadStatsCache();
 
 const ROUNDS=[
@@ -856,6 +880,17 @@ const ROUNDS=[
   {k:"f",label:"Final",test:m=>m.r==="f"}
 ];
 
+/* Toast con balón: "Actualizando datos…" (balón rodando) → "Datos actualizados" (rebote) */
+let _toastTimer=null;
+function showToast(msg,opts){
+  const t=document.getElementById("toast"); if(!t) return;
+  const o=opts||{};
+  const m=t.querySelector(".toast-msg"); if(m) m.textContent=msg;
+  t.classList.toggle("done",!!o.done);
+  t.classList.add("show");
+  clearTimeout(_toastTimer);
+  if(o.done) _toastTimer=setTimeout(()=>t.classList.remove("show"),1900); // al terminar se oculta solo
+}
 function renderChips(){
   const el=document.getElementById("chips"); el.innerHTML="";
   const nLive=STATE.matches.filter(m=>m.s==="live").length;
@@ -1034,9 +1069,26 @@ function renderMatches(){
   const nStats=Object.keys(aggregateStats()).length;
   const sbadge=nStats?`<span class="statsbadge">📊 ${nStats} equipos con stats cargadas</span>`:"";
   info.innerHTML=`${badge}${sbadge}<span><b>${labels[activeRound]||"Partidos"}</b>${dayTxt} — ${list.length} partido${list.length!==1?'s':''}${query?` · “${query}”`:''}</span>
-    <span class="refresh" id="refreshBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Actualizar</span>`;
+    <span class="refresh${_refreshing?' spin':''}" id="refreshBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg><span class="rf-label">${_refreshing?'Actualizando…':'Actualizar'}</span></span>`;
   grid.innerHTML=list.length?list.map(matchCard).join(""):`<div class="empty">Sin partidos${query?` para “${query}”`:""}${activeDay!=="all"?" en el día elegido":" en esta ronda"}.</div>`;
-  const rb=document.getElementById("refreshBtn"); if(rb) rb.onclick=()=>{rb.classList.add("spin");load(true).finally(()=>setTimeout(()=>{rb.classList.remove("spin");scheduleRefresh();},600));};
+  const rb=document.getElementById("refreshBtn");
+  if(rb) rb.onclick=()=>{
+    if(_refreshing) return;
+    _refreshing=true; rb.classList.add("spin"); const l=rb.querySelector(".rf-label"); if(l) l.textContent="Actualizando…";
+    showToast("Actualizando datos…",{loading:true});
+    const t0=Date.now();
+    load(true).finally(()=>{
+      const wait=Math.max(0,620-(Date.now()-t0)); // mínimo de feedback para que no parpadee
+      setTimeout(()=>{
+        _refreshing=false;
+        const b=document.getElementById("refreshBtn");
+        if(b){ b.classList.remove("spin"); b.classList.add("done"); const ll=b.querySelector(".rf-label"); if(ll) ll.textContent="¡Listo!";
+          setTimeout(()=>{ const b2=document.getElementById("refreshBtn"); if(b2){ b2.classList.remove("done"); const l2=b2.querySelector(".rf-label"); if(l2) l2.textContent="Actualizar"; } },1400); }
+        showToast("Datos actualizados",{done:true});
+        scheduleRefresh();
+      }, wait);
+    });
+  };
 }
 function renderKPIs(){
   const k=computeKPIs(STATE.matches,STATE.standings);
