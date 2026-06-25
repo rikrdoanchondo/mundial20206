@@ -1483,7 +1483,7 @@ function renderModal(m,d){
         return `<div class="tl-item ${home?'':'away'} ev-subst"><span class="min">${mn}</span><span class="ic">🔁</span><span class="tx"><b class="sub-in">▲ ${e.player||"—"}</b>${e.assist?`<br><span class="sub-out">▼ ${e.assist}</span>`:""}<br><span>${nm(ab)} · cambio</span></span></div>`;
       }
       const ic=e.type==="Goal"?"⚽":(/red/i.test(e.detail||"")?"🟥":"🟨");
-      const extra=e.type==="Goal"&&e.assist?`<span> asist. ${e.assist}</span>`:(/own/i.test(e.detail||"")?`<span> (en propia)</span>`:(/penalty/i.test(e.detail||"")?`<span> (penal)</span>`:"");
+      const extra=e.type==="Goal"&&e.assist?`<span> asist. ${e.assist}</span>`:(/own/i.test(e.detail||"")?`<span> (en propia)</span>`:(/penalty/i.test(e.detail||"")?`<span> (penal)</span>`:""));
       return `<div class="tl-item ${home?'':'away'}"><span class="min">${mn}</span><span class="ic">${ic}</span><span class="tx"><b>${e.player||"—"}</b>${extra}<br><span>${nm(ab)}</span></span></div>`;
     }).join(""):`<div class="modal-note">Sin goles, tarjetas ni cambios registrados.</div>`;
   } else {
