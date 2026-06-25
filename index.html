@@ -253,6 +253,42 @@
   .th-ok{font-size:.6rem;font-weight:700;color:var(--gold);background:var(--gold-dim);border-radius:5px;padding:3px 7px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
   .th-out{font-size:.6rem;font-weight:700;color:var(--muted);background:var(--bg-2);border-radius:5px;padding:3px 7px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
 
+  /* columnas G/E/P y filas clicables en posiciones */
+  tbody td.wdl{font-family:'JetBrains Mono';font-size:.76rem}
+  td.wdl-w{color:var(--grass)} td.wdl-l{color:var(--coral);opacity:.85}
+  thead th{padding-left:3px;padding-right:3px}
+  tbody tr.team-row{cursor:pointer;transition:background .12s}
+  tbody tr.team-row:hover{background:var(--surface-2)}
+  .grp table tbody td{padding-left:3px;padding-right:3px}
+  .grp table tbody .team{padding-left:10px}
+  /* mantener stats del pronóstico en cards live/done */
+  .why.pred-keep{color:var(--ink-2)}
+  .why.pred-keep .pred-mark{color:var(--violet)}
+  /* sustituciones en eventos */
+  .tl-item.ev-subst .ic{font-size:.92rem}
+  .sub-in{color:var(--grass);font-weight:600} .sub-out{color:var(--coral);font-size:.74rem}
+  /* detalle por equipo (modal) */
+  .team-rec{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:14px}
+  .tr-box{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--bg-2);border:1px solid var(--line);border-radius:9px;padding:9px 4px}
+  .tr-box span{font-size:.58rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .tr-box b{font-family:'Oswald';font-weight:700;font-size:1.2rem;color:var(--ink)}
+  .tr-box.ok b{color:var(--grass)} .tr-box.bad b{color:var(--coral)} .tr-box.gold{border-color:var(--gold-dim)} .tr-box.gold b{color:var(--gold)}
+  .tm-scorer{font-size:.8rem;color:var(--ink-2);background:var(--gold-dim);border:1px solid rgba(242,179,71,.3);border-radius:9px;padding:8px 11px;margin-bottom:14px}
+  .tm-scorer b{color:var(--gold)}
+  .tm-h{font-family:'Oswald';font-weight:600;font-size:.9rem;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-2);margin-bottom:8px}
+  .team-matches{display:flex;flex-direction:column;gap:1px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .tm-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:9px 11px;background:var(--surface);font-size:.8rem}
+  .tm-row+.tm-row{border-top:1px solid var(--line)}
+  .tm-row[onclick]:hover{background:var(--surface-2)}
+  .tm-d{font-family:'JetBrains Mono';font-size:.68rem;color:var(--muted);white-space:nowrap}
+  .tm-opp{display:inline-flex;align-items:center;gap:6px;min-width:0;font-weight:500}
+  .tm-opp .crest{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+  .tm-res{font-family:'JetBrains Mono';font-weight:700;padding:2px 7px;border-radius:5px}
+  .tm-res.win{color:var(--grass);background:var(--grass-dim)} .tm-res.lose{color:var(--coral);background:var(--coral-dim)} .tm-res.draw{color:var(--gold);background:var(--gold-dim)}
+  .tm-live{color:var(--gold);font-size:.62rem;font-weight:700;margin-left:5px}
+  .tm-pred{font-family:'JetBrains Mono';font-size:.7rem;color:var(--ink-2);border:1px dashed var(--line-2);border-radius:5px;padding:2px 7px}
+  .tm-pend{font-size:.7rem;color:var(--muted)}
+
   /* Goleadores */
   .scorer-wrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
   .scorer-wrap table tbody td{text-align:left}
@@ -438,7 +474,8 @@
       <span><i style="background:var(--sky)"></i> 2.º — clasificado</span>
       <span><i style="background:var(--gold)"></i> 3.º entre los 8 mejores</span>
       <span><i style="background:var(--coral);opacity:.6"></i> 3.º fuera / eliminado</span>
-      <span class="mono">PJ · GF–GC · DIF · PTS</span>
+      <span class="mono">PJ jugados · G ganados · E empates · P perdidos · GF–GC goles · DIF diferencia · PTS puntos</span>
+      <span style="color:var(--sky)">👆 Toca un equipo para ver su detalle</span>
     </div>
     <div class="thirds-wrap">
       <div class="thirds-head"><h3>Mejores terceros</h3><span id="thirdsMeta">Los 8 mejores 3.º clasifican a 16vos · se ordena por puntos, diferencia y goles</span></div>
@@ -884,8 +921,8 @@ function assemble(data){
     const meta={id,city,venue,tm,ts,dayKey:dayKeyTs(ts),dayLabel:dayLabelTs(ts)};
     if(koCount[r]!==undefined) koCount[r]++;
     const prePr=(h&&a&&PRIORS[h]&&PRIORS[a])?predict(h,a,R):null; // pronóstico del modelo para comparar
-    if(isDone(f.status)){ matches.push({r,g,d:dt,h,a,s:"done",hs:f.hg,as:f.ag,...meta,ps:prePr?prePr.ps:null,p:prePr?prePr.p:null,c:prePr?prePr.c:null}); }
-    else if(isLive(f.status)){ matches.push({r,g,d:dt,h,a,s:"live",hs:f.hg??0,as:f.ag??0,...meta,elapsed:f.elapsed,extra:f.extra,st:f.status,ps:prePr?prePr.ps:null,p:prePr?prePr.p:null,c:prePr?prePr.c:null}); }
+    if(isDone(f.status)){ matches.push({r,g,d:dt,h,a,s:"done",hs:f.hg,as:f.ag,...meta,ps:prePr?prePr.ps:null,p:prePr?prePr.p:null,c:prePr?prePr.c:null,usedStats:prePr?prePr.usedStats:false,w:prePr?noteFor(h,a):null,sn:prePr?statNote(h,a,R):null}); }
+    else if(isLive(f.status)){ matches.push({r,g,d:dt,h,a,s:"live",hs:f.hg??0,as:f.ag??0,...meta,elapsed:f.elapsed,extra:f.extra,st:f.status,ps:prePr?prePr.ps:null,p:prePr?prePr.p:null,c:prePr?prePr.c:null,usedStats:prePr?prePr.usedStats:false,w:prePr?noteFor(h,a):null,sn:prePr?statNote(h,a,R):null}); }
     else if(h&&a&&PRIORS[h]&&PRIORS[a]){ const pr=predict(h,a,R); matches.push({r,g,d:dt,h,a,s:"pred",p:pr.p,ps:pr.ps,c:pr.c,usedStats:pr.usedStats,w:noteFor(h,a),sn:statNote(h,a,R),...meta}); }
     else { matches.push({r,g,d:dt||(KO_DATE[r]||""),h:"?",a:"?",s:"lock",...meta}); }
   }
@@ -1093,8 +1130,10 @@ function matchCard(m){
     const rev=reviewBlock(m);
     const evs=cardEvents(m);
     const stp=stoppageInfo(m);
+    // mantiene la nota de estadísticas/datos del pronóstico aunque el partido ya haya iniciado o terminado
+    const pstats=m.sn?`<div class="why pred-keep"><span class="pred-mark">${m.usedStats?'📊 Datos del pronóstico':'Datos del pronóstico'}</span> ${m.sn}</div>`:"";
     return `<div class="mc${m.id?' clickable':''}" ${m.id?`onclick="openMatch(${m.id})"`:""}><div class="mc-top"><div class="lhs"><span class="gtag">GR ${m.g}</span>${dateTag(m)}</div>${tag}</div>
-      <div class="matchup">${side(m.h,hw?'win':aw?'lose':'')}<div class="scorechip ${live?'liv':'fin'}">${m.hs}–${m.as}</div>${sideR(m.a,aw?'win':hw?'lose':'')}</div>${stp}${evs}${rev}${foot}</div>`;
+      <div class="matchup">${side(m.h,hw?'win':aw?'lose':'')}<div class="scorechip ${live?'liv':'fin'}">${m.hs}–${m.as}</div>${sideR(m.a,aw?'win':hw?'lose':'')}</div>${stp}${evs}${rev}${pstats}${foot}</div>`;
   }
   const [pH,pD,pA]=m.p, mx=Math.max(pH,pD,pA);
   const sb=m.usedStats?`<span class="why stat-note" style="border:none;padding:0;margin-top:6px">📊 <b>Con estadísticas</b> · ${m.sn||""}</span>`:(m.sn?`<span class="stat-note">${m.sn}</span>`:"");
@@ -1176,11 +1215,11 @@ function renderStandings(){
       const ab=toAbbr(row.team)||row.team, dif=(row.gf||0)-(row.ga||0), dc=dif>0?"pos":dif<0?"neg":"zero";
       const st=qual[ab]||(i<2?"q1":"elim"); const qc=st==="q1"?"q1":st==="q2"?"q2":st==="q3in"?"q3in":st==="q3out"?"q3out":"";
       const badge=QL[st]?`<span class="qbadge ${st}">${QL[st]}</span>`:"";
-      return `<tr class="${qc}"><td><div class="team"><span class="pos">${i+1}</span><span class="crest" style="background:${cl(ab)}"></span><span class="tn">${nm(ab)}</span>${badge}</div></td>
-        <td>${row.played||0}</td><td class="gf-cell">${row.gf||0}–${row.ga||0}</td><td class="dif ${dc}">${dif>0?'+':''}${dif}</td><td class="pts">${row.points||0}</td></tr>`;
+      return `<tr class="${qc} team-row" onclick="openTeam('${ab}')" title="Ver detalle de ${nm(ab)}"><td><div class="team"><span class="pos">${i+1}</span><span class="crest" style="background:${cl(ab)}"></span><span class="tn">${nm(ab)}</span>${badge}</div></td>
+        <td>${row.played||0}</td><td class="wdl wdl-w">${row.win||0}</td><td class="wdl">${row.draw||0}</td><td class="wdl wdl-l">${row.lose||0}</td><td class="gf-cell">${row.gf||0}–${row.ga||0}</td><td class="dif ${dc}">${dif>0?'+':''}${dif}</td><td class="pts">${row.points||0}</td></tr>`;
     }).join("");
     return `<div class="grp"><div class="grp-h"><span class="gname">Grupo <span>${g}</span></span><span class="gpj">${pj} jornada${pj!==1?'s':''}</span></div>
-      <table><thead><tr><th class="tl">Equipo</th><th>PJ</th><th>GF–GC</th><th>DIF</th><th>PTS</th></tr></thead><tbody>${body}</tbody></table></div>`;
+      <table><thead><tr><th class="tl">Equipo</th><th title="Partidos jugados">PJ</th><th title="Ganados">G</th><th title="Empatados">E</th><th title="Perdidos">P</th><th title="Goles a favor y en contra">GF–GC</th><th title="Diferencia de gol">DIF</th><th title="Puntos">PTS</th></tr></thead><tbody>${body}</tbody></table></div>`;
   }).join("");
   renderThirds();
 }
@@ -1437,13 +1476,16 @@ function renderModal(m,d){
       return `<div class="mstat"><div class="lbl">${r[0]}</div><div class="v l">${vh??'–'}</div><div class="mbar"><i class="bl" style="width:${ph}%"></i><i class="br2" style="width:${100-ph}%"></i></div><div class="v r">${va??'–'}</div></div>`;
     }).join(""):`<div class="modal-note">Sin estadísticas detalladas para este partido todavía.</div>`;
   } else if(modalTab==="events"){
-    const evs=(d.events||[]).filter(e=>e.type==="Goal"||e.type==="Card");
+    const evs=(d.events||[]).filter(e=>e.type==="Goal"||e.type==="Card"||e.type==="subst");
     content=evs.length?evs.map(e=>{
-      const ab=toAbbr(e.team), home=ab===m.h;
+      const ab=toAbbr(e.team), home=ab===m.h, mn=e.minute!=null?e.minute+(e.extra?`+${e.extra}`:"")+"'":"";
+      if(e.type==="subst"){
+        return `<div class="tl-item ${home?'':'away'} ev-subst"><span class="min">${mn}</span><span class="ic">🔁</span><span class="tx"><b class="sub-in">▲ ${e.player||"—"}</b>${e.assist?`<br><span class="sub-out">▼ ${e.assist}</span>`:""}<br><span>${nm(ab)} · cambio</span></span></div>`;
+      }
       const ic=e.type==="Goal"?"⚽":(/red/i.test(e.detail||"")?"🟥":"🟨");
-      const extra=e.type==="Goal"&&e.assist?`<span> asist. ${e.assist}</span>`:(/own/i.test(e.detail||"")?`<span> (en propia)</span>`:(/penalty/i.test(e.detail||"")?`<span> (penal)</span>`:""));
-      return `<div class="tl-item ${home?'':'away'}"><span class="min">${e.minute!=null?e.minute+"'":""}</span><span class="ic">${ic}</span><span class="tx"><b>${e.player||"—"}</b>${extra}<br><span>${nm(ab)}</span></span></div>`;
-    }).join(""):`<div class="modal-note">Sin goles ni tarjetas registrados.</div>`;
+      const extra=e.type==="Goal"&&e.assist?`<span> asist. ${e.assist}</span>`:(/own/i.test(e.detail||"")?`<span> (en propia)</span>`:(/penalty/i.test(e.detail||"")?`<span> (penal)</span>`:"");
+      return `<div class="tl-item ${home?'':'away'}"><span class="min">${mn}</span><span class="ic">${ic}</span><span class="tx"><b>${e.player||"—"}</b>${extra}<br><span>${nm(ab)}</span></span></div>`;
+    }).join(""):`<div class="modal-note">Sin goles, tarjetas ni cambios registrados.</div>`;
   } else {
     const lH=(d.lineups||[]).find(l=>toAbbr(l.team)===m.h), lA=(d.lineups||[]).find(l=>toAbbr(l.team)===m.a);
     const col=(l,ab)=>{ if(!l) return `<div class="lu"><h5><span class="crest" style="background:${cl(ab)};width:11px;height:11px;border-radius:50%;display:inline-block"></span>${nm(ab)}</h5><div class="modal-note" style="border:none;padding:0">Sin alineación.</div></div>`;
@@ -1456,6 +1498,42 @@ function renderModal(m,d){
 }
 function setModalTab(t){ modalTab=t; const m=STATE._lastModal; if(m) renderModal(m.m,m.d); }
 function closeModal(){ document.getElementById("modal").classList.remove("open"); }
+/* Detalle por equipo: récord completo, partidos en el torneo y estado de clasificación */
+function openTeam(ab){
+  const row=STATE.standings.find(r=>(toAbbr(r.team)||r.team)===ab)||null;
+  const st=STATE.qual[ab];
+  const QLABEL={q1:"1.º de grupo — clasificado",q2:"2.º de grupo — clasificado",q3in:"Mejor 3.º — clasificado",q3out:"3.º — por ahora fuera",q3pend:"3.º — pendiente",elim:"Eliminado"};
+  document.getElementById("modalTitle").textContent=nm(ab);
+  const grp=row?grpName(row.group):"—";
+  document.getElementById("modalSub").textContent=`Grupo ${grp}${st&&QLABEL[st]?" · "+QLABEL[st]:""}`;
+  const dif=row?((row.gf||0)-(row.ga||0)):0;
+  const rec=row?`<div class="team-rec">
+    <div class="tr-box"><span>PJ</span><b>${row.played||0}</b></div>
+    <div class="tr-box ok"><span>G</span><b>${row.win||0}</b></div>
+    <div class="tr-box"><span>E</span><b>${row.draw||0}</b></div>
+    <div class="tr-box bad"><span>P</span><b>${row.lose||0}</b></div>
+    <div class="tr-box"><span>GF</span><b>${row.gf||0}</b></div>
+    <div class="tr-box"><span>GC</span><b>${row.ga||0}</b></div>
+    <div class="tr-box"><span>DIF</span><b>${dif>0?'+':''}${dif}</b></div>
+    <div class="tr-box gold"><span>PTS</span><b>${row.points||0}</b></div>
+  </div>`:`<div class="modal-note">Sin datos de posiciones para esta selección.</div>`;
+  const ms=STATE.matches.filter(m=>(m.h===ab||m.a===ab)).slice().sort((a,b)=>((a.ts??Infinity)-(b.ts??Infinity)));
+  const matchRows=ms.map(m=>{
+    const homeTeam=m.h===ab, opp=homeTeam?m.a:m.h;
+    let result;
+    if(m.s==="done"||m.s==="live"){ const myg=homeTeam?m.hs:m.as, og=homeTeam?m.as:m.hs;
+      const res=myg>og?"V":myg<og?"D":"E", rc=res==="V"?"win":res==="D"?"lose":"draw";
+      result=`<span class="tm-res ${rc}">${myg}–${og}</span>${m.s==="live"?'<span class="tm-live">● vivo</span>':''}`; }
+    else if(m.s==="pred"&&Array.isArray(m.ps)){ result=`<span class="tm-pred">pron. ${homeTeam?m.ps[0]:m.ps[1]}–${homeTeam?m.ps[1]:m.ps[0]}</span>`; }
+    else result=`<span class="tm-pend">por jugar</span>`;
+    const clk=m.id?` onclick="openMatch(${m.id})" style="cursor:pointer"`:"";
+    return `<div class="tm-row"${clk}><span class="tm-d">${m.d||""}${m.tm?` · ${m.tm}`:""}</span><span class="tm-opp">${homeTeam?"vs":"@"} <span class="crest" style="background:${cl(opp)}"></span>${nm(opp)}</span>${result}</div>`;
+  }).join("");
+  const sc=topScorerOf(ab);
+  const scLine=sc?`<div class="tm-scorer">⚽ Máximo goleador: <b>${sc.name}</b> · ${sc.goals} gol${sc.goals!==1?'es':''}</div>`:"";
+  document.getElementById("modalBody").innerHTML=`${rec}${scLine}<div class="tm-h">Partidos en el torneo</div><div class="team-matches">${matchRows||'<div class="modal-note">Sin partidos.</div>'}</div><div class="modal-note">Toca un partido para ver su detalle completo.</div>`;
+  document.getElementById("modal").classList.add("open");
+}
 
 /* recalcula matches con las stats nuevas sin volver a pedir a la red */
 function rebuildFromState(){
