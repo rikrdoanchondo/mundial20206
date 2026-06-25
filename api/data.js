@@ -73,15 +73,28 @@ export default async function handler(req, res) {
       scorers,
     };
 
-    // Si hay algún partido en vivo, cachea muy poco en el CDN para que el marcador
-    // se actualice casi en tiempo real (el CDN sigue agrupando peticiones, así que
-    // la cuota de la API se mantiene protegida). Sin partidos en vivo, caché normal.
+    // Cachea poco en el CDN cuando hay partidos EN VIVO o a punto de empezar (alrededor
+    // del horario de juego), para que el auto-refresh traiga datos frescos y no se quede
+    // sirviendo una versión "NS" vieja tras el saque. En periodos sin partidos cercanos,
+    // caché normal (protege la cuota de la API). El CDN agrupa peticiones de todos los usuarios.
     const LIVE_TTL = parseInt(process.env.CACHE_TTL_LIVE || "25", 10);
     const LIVE_CODES = ["1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT", "SUSP"];
-    const hasLive = fixtures.some(f => LIVE_CODES.includes(String(f.status || "").toUpperCase()));
-    const effTTL = hasLive ? Math.min(LIVE_TTL, TTL) : TTL;
+    const now = Date.now();
+    const AHEAD = 3 * 60 * 60 * 1000;   // hasta 3 h antes del saque
+    const BEHIND = 4 * 60 * 60 * 1000;  // hasta 4 h después (cubre partidos en curso aunque el estado tarde)
+    const liveOrSoon = fixtures.some(f => {
+      const s = String(f.status || "").toUpperCase();
+      if (LIVE_CODES.includes(s)) return true;
+      if ((s === "NS" || s === "TBD") && f.date) {
+        const t = new Date(f.date).getTime();
+        if (!isNaN(t) && t > now - BEHIND && t < now + AHEAD) return true;
+      }
+      return false;
+    });
+    const effTTL = liveOrSoon ? Math.min(LIVE_TTL, TTL) : TTL;
+    const swr = liveOrSoon ? effTTL : effTTL * 2; // en ventana de partidos no sirvas "stale" demasiado tiempo
     const cc = fixtures.length > 0
-      ? `public, max-age=0, s-maxage=${effTTL}, stale-while-revalidate=${effTTL * 2}`
+      ? `public, max-age=0, s-maxage=${effTTL}, stale-while-revalidate=${swr}`
       : "public, max-age=30";
     res.setHeader("cache-control", cc);
     return res.status(200).send(JSON.stringify(payload));
