@@ -322,6 +322,8 @@
   .bslot .br.win .nm{color:var(--ink);font-weight:600}
   .bslot .br .sc{font-family:'JetBrains Mono';font-weight:700;color:var(--muted)}
   .bslot.gold-edge{border-color:var(--gold-dim)}
+  .bslot.proj{border-style:dashed;border-color:rgba(86,179,240,.4)}
+  .bslot.proj::after{content:"derivado";display:block;font-size:.54rem;color:var(--sky);text-transform:uppercase;letter-spacing:.05em;text-align:center;margin-top:2px;opacity:.8}
   .proj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
   .proj-team{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:8px 11px;font-size:.8rem}
   .proj-team .crest{width:9px;height:9px;border-radius:50%;flex-shrink:0}
@@ -342,6 +344,8 @@
   .bm-colh{font-family:'Oswald';font-weight:600;font-size:11px;letter-spacing:.04em;fill:var(--ink-2);text-transform:uppercase}
   .bm-box{fill:var(--surface);stroke:var(--line);stroke-width:1}
   .bm-box.done{stroke:rgba(47,212,126,.4)} .bm-box.live{stroke:rgba(242,179,71,.55)} .bm-box.tbd{fill:var(--bg-2);stroke-dasharray:4 3}
+  .bm-box.proj{fill:var(--bg-2);stroke:var(--sky);stroke-opacity:.55;stroke-dasharray:5 3}
+  .bm-projtag{font-family:'JetBrains Mono';font-size:7px;fill:var(--sky);opacity:.85;text-transform:uppercase;letter-spacing:.04em}
   .bm-ab{font-family:'Oswald';font-weight:600;font-size:13px;fill:var(--ink)}
   .bm-sc{font-family:'JetBrains Mono';font-weight:700;font-size:12px;fill:var(--ink-2)}
   .bm-team{cursor:pointer} .bm-team.win .bm-ab{fill:var(--grass)} .bm-team.win .bm-sc{fill:var(--grass)}
@@ -921,8 +925,8 @@ function assemble(data){
     const meta={id,city,venue,tm,ts,dayKey:dayKeyTs(ts),dayLabel:dayLabelTs(ts)};
     if(koCount[r]!==undefined) koCount[r]++;
     const prePr=(h&&a&&PRIORS[h]&&PRIORS[a])?predict(h,a,R):null; // pronóstico del modelo para comparar
-    if(isDone(f.status)){ matches.push({r,g,d:dt,h,a,s:"done",hs:f.hg,as:f.ag,...meta,ps:prePr?prePr.ps:null,p:prePr?prePr.p:null,c:prePr?prePr.c:null,usedStats:prePr?prePr.usedStats:false,w:prePr?noteFor(h,a):null,sn:prePr?statNote(h,a,R):null}); }
-    else if(isLive(f.status)){ matches.push({r,g,d:dt,h,a,s:"live",hs:f.hg??0,as:f.ag??0,...meta,elapsed:f.elapsed,extra:f.extra,st:f.status,ps:prePr?prePr.ps:null,p:prePr?prePr.p:null,c:prePr?prePr.c:null,usedStats:prePr?prePr.usedStats:false,w:prePr?noteFor(h,a):null,sn:prePr?statNote(h,a,R):null}); }
+    if(isDone(f.status)){ matches.push({r,g,d:dt,h,a,s:"done",hs:f.hg,as:f.ag,winner:f.winner,...meta,ps:prePr?prePr.ps:null,p:prePr?prePr.p:null,c:prePr?prePr.c:null,usedStats:prePr?prePr.usedStats:false,w:prePr?noteFor(h,a):null,sn:prePr?statNote(h,a,R):null}); }
+    else if(isLive(f.status)){ matches.push({r,g,d:dt,h,a,s:"live",hs:f.hg??0,as:f.ag??0,winner:f.winner,...meta,elapsed:f.elapsed,extra:f.extra,st:f.status,ps:prePr?prePr.ps:null,p:prePr?prePr.p:null,c:prePr?prePr.c:null,usedStats:prePr?prePr.usedStats:false,w:prePr?noteFor(h,a):null,sn:prePr?statNote(h,a,R):null}); }
     else if(h&&a&&PRIORS[h]&&PRIORS[a]){ const pr=predict(h,a,R); matches.push({r,g,d:dt,h,a,s:"pred",p:pr.p,ps:pr.ps,c:pr.c,usedStats:pr.usedStats,w:noteFor(h,a),sn:statNote(h,a,R),...meta}); }
     else { matches.push({r,g,d:dt||(KO_DATE[r]||""),h:"?",a:"?",s:"lock",...meta}); }
   }
@@ -1278,22 +1282,22 @@ function renderKO(){
   else { meta.textContent="Clasificados proyectados (la fase de grupos sigue)"; renderProjected(); }
 }
 function renderRealBracket(){
-  const cols=[["16vos","r32",16],["8vos","r16",8],["4tos","qf",4],["Semis","sf",2],["Final","f",1]];
+  const cols=[["16vos","r32"],["8vos","r16"],["4tos","qf"],["Semis","sf"],["Final","f"]];
+  const rounds=bracketData(); const byKey={}; rounds.forEach(r=>byKey[r.key]=r); // incluye los cruces derivados
   document.getElementById("koBody").innerHTML=`<div class="bracket-scroll"><div class="bracket">`+cols.map((c,ci)=>{
-    const ms=STATE.matches.filter(m=>m.r===c[1]);
-    let slots="";
-    for(let i=0;i<c[2];i++){
-      const m=ms[i];
-      if(m&&m.h&&m.h!=="?"){
-        const done=m.s==="done"||m.s==="live"; const hw=done&&m.hs>m.as, aw=done&&m.as>m.hs;
-        slots+=`<div class="bslot ${ci===4?'gold-edge':''}">
-          <div class="br ${hw?'win':''}"><span class="nm"><span class="crest" style="background:${cl(m.h)}"></span>${m.h}</span><span class="sc">${done?m.hs:''}</span></div>
-          <div class="br ${aw?'win':''}"><span class="nm"><span class="crest" style="background:${cl(m.a)}"></span>${m.a}</span><span class="sc">${done?m.as:''}</span></div></div>`;
+    const rd=byKey[c[1]]||{n:0,nodes:[]}; let slots="";
+    const cell=(m,ab,win)=> (!ab||ab==="?")
+      ? `<div class="br"><span class="nm"><span class="pdot"></span>Por definir</span></div>`
+      : `<div class="br ${win?'win':''}"><span class="nm"><span class="crest" style="background:${cl(ab)}"></span>${ab}</span><span class="sc">${m.done?(ab===m.h?m.hs:m.as):''}</span></div>`;
+    for(let i=0;i<rd.n;i++){
+      const m=rd.nodes[i];
+      if(m){ const hw=m.done&&m.hs>m.as, aw=m.done&&m.as>m.hs;
+        slots+=`<div class="bslot ${ci===4?'gold-edge':''}${m.proj?' proj':''}">${cell(m,m.h,hw)}${cell(m,m.a,aw)}</div>`;
       } else {
         slots+=`<div class="bslot ${ci===4?'gold-edge':''}"><div class="br"><span class="nm"><span class="pdot"></span>Por definir</span></div><div class="br"><span class="nm"><span class="pdot"></span>Por definir</span></div></div>`;
       }
     }
-    return `<div class="bcol"><div class="bcol-h">${c[0]}<small>${c[2]} ${c[2]===1?'partido':'partidos'}</small></div><div class="bcol-inner">${slots}</div></div>`;
+    return `<div class="bcol"><div class="bcol-h">${c[0]}<small>${rd.n} ${rd.n===1?'partido':'partidos'}</small></div><div class="bcol-inner">${slots}</div></div>`;
   }).join("")+`</div></div>`;
 }
 function renderProjected(){
@@ -1312,14 +1316,34 @@ function renderProjected(){
     <div class="proj-grid">${grid||'<div class="empty">Aún sin proyección.</div>'}</div>`;
 }
 /* ===================== MAPA INTERACTIVO DE ELIMINATORIAS ===================== */
+/* ganador de un nodo de bracket: por marcador y, si está empatado (KO a penales), por la bandera winner */
+function koWinner(nd){
+  if(!nd||!nd.done) return null;
+  if(nd.hs>nd.as) return nd.h;
+  if(nd.as>nd.hs) return nd.a;
+  if(nd.winner==="home") return nd.h;
+  if(nd.winner==="away") return nd.a;
+  return null;
+}
 function bracketData(){
   const cfg=[["r32",16],["r16",8],["qf",4],["sf",2],["f",1]];
-  return cfg.map(([key,n])=>{
+  const rounds=cfg.map(([key,n])=>{
     const ms=STATE.matches.filter(m=>m.r===key&&m.h&&m.h!=="?");
     const nodes=[];
-    for(let i=0;i<n;i++){ const m=ms[i]; nodes.push(m?{h:m.h,a:m.a,hs:m.hs,as:m.as,s:m.s,id:m.id,done:(m.s==="done"||m.s==="live"),live:m.s==="live"}:null); }
+    for(let i=0;i<n;i++){ const m=ms[i]; nodes.push(m?{h:m.h,a:m.a,hs:m.hs,as:m.as,s:m.s,id:m.id,winner:m.winner,done:(m.s==="done"||m.s==="live"),live:m.s==="live"}:null); }
     return {key,n,nodes};
   });
+  // Deriva el cruce de la siguiente ronda con los ganadores de la ronda previa (cuando la API
+  // aún no publicó el fixture). El nodo j se alimenta de los nodos 2j y 2j+1 de la ronda anterior.
+  for(let c=1;c<rounds.length;c++){
+    const prev=rounds[c-1].nodes, cur=rounds[c].nodes;
+    for(let j=0;j<cur.length;j++){
+      if(cur[j]) continue; // ya existe el partido real
+      const wa=koWinner(prev[2*j]), wb=koWinner(prev[2*j+1]);
+      if(wa||wb){ cur[j]={h:wa||"?",a:wb||"?",hs:null,as:null,s:"proj",id:null,winner:null,done:false,live:false,proj:true}; }
+    }
+  }
+  return rounds;
 }
 function bmNode(x,y,w,h,nd){
   const top=y-h/2;
@@ -1329,9 +1353,14 @@ function bmNode(x,y,w,h,nd){
       <text x="${x+11}" y="${y+13}" class="bm-tbd">Por definir</text></g>`;
   }
   const hw=nd.done&&nd.hs>nd.as, aw=nd.done&&nd.as>nd.hs;
-  const teamRow=(ab,yy,win)=>`<g class="bm-team${win?' win':''}" data-team="${ab}"><circle cx="${x+13}" cy="${yy}" r="4.5" fill="${cl(ab)}"/><text x="${x+23}" y="${yy+4}" class="bm-ab">${ab}</text>${nd.done?`<text x="${x+w-9}" y="${yy+4}" text-anchor="end" class="bm-sc">${ab===nd.h?nd.hs:nd.as}</text>`:""}</g>`;
-  const attrs=nd.id?`class="bm-node clickable" data-id="${nd.id}"`:`class="bm-node"`;
-  return `<g ${attrs} data-teams="${nd.h},${nd.a}"><rect x="${x}" y="${top}" width="${w}" height="${h}" rx="8" class="bm-box${nd.live?' live':nd.done?' done':''}"/>
+  const teamRow=(ab,yy,win)=>{
+    if(!ab||ab==="?") return `<g class="bm-team"><text x="${x+13}" y="${yy+4}" class="bm-tbd">Por definir</text></g>`;
+    return `<g class="bm-team${win?' win':''}" data-team="${ab}"><circle cx="${x+13}" cy="${yy}" r="4.5" fill="${cl(ab)}"/><text x="${x+23}" y="${yy+4}" class="bm-ab">${ab}</text>${nd.done?`<text x="${x+w-9}" y="${yy+4}" text-anchor="end" class="bm-sc">${ab===nd.h?nd.hs:nd.as}</text>`:""}</g>`;
+  };
+  const attrs=nd.id?`class="bm-node clickable" data-id="${nd.id}"`:`class="bm-node${nd.proj?' proj':''}"`;
+  const boxCls=nd.live?' live':nd.done?' done':nd.proj?' proj':'';
+  const tag=nd.proj?`<text x="${x+w-7}" y="${top+10}" text-anchor="end" class="bm-projtag">deriv.</text>`:"";
+  return `<g ${attrs} data-teams="${nd.h},${nd.a}"><rect x="${x}" y="${top}" width="${w}" height="${h}" rx="8" class="bm-box${boxCls}"/>${tag}
     ${teamRow(nd.h,y-h/4,hw)}${teamRow(nd.a,y+h/4,aw)}</g>`;
 }
 function renderBracketMap(){

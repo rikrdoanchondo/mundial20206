@@ -122,6 +122,7 @@ function simplifyFixture(f) {
     awayId: f?.teams?.away?.id ?? null,
     hg: f?.goals?.home ?? null,
     ag: f?.goals?.away ?? null,
+    winner: f?.teams?.home?.winner === true ? "home" : (f?.teams?.away?.winner === true ? "away" : null), // para resolver el ganador en KO (incluye penales)
   };
 }
 
