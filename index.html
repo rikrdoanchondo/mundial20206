@@ -1263,19 +1263,25 @@ function renderThirds(){
    tabla refleje los goles del momento sin esperar a que el endpoint de goleadores de la API se actualice.
    Se recalcula en cada render desde la base de la API (no se acumula entre llamadas). */
 function mergedScorers(){
-  const out=(STATE.scorers||[]).map(p=>({...p}));
-  const byKey={}; out.forEach(p=>{ byKey[norm(p.name||"")]=p; });
-  for(const m of STATE.matches){
-    if(m.s!=="live"||!m.id) continue;
-    const c=STATS_CACHE[m.id]; const evs=c&&c.data&&Array.isArray(c.data.events)?c.data.events:null;
+  // Conteo desde TODOS los eventos de partidos cacheados (en vivo y terminados que se hayan cargado).
+  const ev={};
+  for(const id in STATS_CACHE){
+    const c=STATS_CACHE[id]; const evs=c&&c.data&&Array.isArray(c.data.events)?c.data.events:null;
     if(!evs) continue;
     for(const e of evs){
-      if(e.type!=="Goal"||/own/i.test(e.detail||"")) continue; // los autogoles no cuentan al goleador
-      const name=e.player; if(!name) continue;
-      const key=norm(name);
-      if(byKey[key]){ byKey[key].goals=(byKey[key].goals||0)+1; byKey[key]._live=true; }
-      else { byKey[key]={name,team:(toAbbr(e.team)||e.team),goals:1,assists:0,_live:true}; out.push(byKey[key]); }
+      if(e.type==="Goal"&&!/own/i.test(e.detail||"")&&e.player){ const k=norm(e.player); const o=ev[k]||(ev[k]={name:e.player,team:(toAbbr(e.team)||e.team),goals:0,assists:0}); o.goals++; } // autogoles no cuentan
     }
+    for(const e of evs){ if(e.type==="Goal"&&e.assist&&!/own/i.test(e.detail||"")){ const k=norm(e.assist); const o=ev[k]||(ev[k]={name:e.assist,team:(toAbbr(e.team)||e.team),goals:0,assists:0}); o.assists++; } }
+  }
+  // Base de la API combinada con el conteo de eventos: por jugador se toma el MAYOR (corrige el atraso de la API).
+  const out=(STATE.scorers||[]).map(p=>({...p}));
+  const byKey={}; out.forEach(p=>{ byKey[norm(p.name||"")]=p; });
+  for(const k in ev){
+    const ep=ev[k];
+    if(byKey[k]){
+      if(ep.goals>(byKey[k].goals||0)){ byKey[k].goals=ep.goals; byKey[k]._live=true; }
+      if(ep.assists>(byKey[k].assists||0)) byKey[k].assists=ep.assists;
+    } else { byKey[k]={name:ep.name,team:ep.team,goals:ep.goals,assists:ep.assists,_live:true}; out.push(byKey[k]); }
   }
   return out.sort((a,b)=>(b.goals-a.goals)||((b.assists||0)-(a.assists||0)));
 }
@@ -1288,12 +1294,12 @@ function renderScorers(){
     return;
   }
   const nLive=list.filter(p=>p._live).length;
-  meta.textContent=`${list.length} máximos artilleros${nLive?` · ${nLive} con gol en vivo`:''}`;
+  meta.textContent=`${list.length} máximos artilleros${nLive?` · ${nLive} actualizados al momento ●`:''}`;
   const rows=list.map((p,i)=>{
     const ab=toAbbr(p.team)||p.team;
     const photo=p.photo?`<img src="${p.photo}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">`:`<span style="width:30px;height:30px;border-radius:50%;background:${cl(ab)};display:inline-block;flex-shrink:0"></span>`;
     return `<tr${p._live?' class="sc-liverow"':''}><td class="sc-rank">${i+1}</td>
-      <td><div class="sc-player">${photo}<div><div class="nm">${p.name||"—"}${p._live?' <span class="sc-live" title="Anotó en un partido en vivo">●</span>':''}</div><div class="tm">${nm(ab)}</div></div></div></td>
+      <td><div class="sc-player">${photo}<div><div class="nm">${p.name||"—"}${p._live?' <span class="sc-live" title="Conteo al momento desde los eventos del partido (más al día que el dato oficial)">●</span>':''}</div><div class="tm">${nm(ab)}</div></div></div></td>
       <td class="sc-goals">${p.goals||0}</td><td class="sc-num">${p.assists||0}</td>
       <td class="sc-num">${p.shotsOn??"–"}</td><td class="sc-num">${p.penalties??"–"}</td>
       <td class="sc-num">${p.appearances??"–"}</td></tr>`;
@@ -1490,12 +1496,12 @@ async function prefetchEvents(){
   if(_prefetching) return;
   const live=STATE.matches.filter(m=>m.id&&m.s==="live");
   const doneUncached=STATE.matches.filter(m=>m.id&&m.s==="done").filter(m=>{ const c=STATS_CACHE[m.id]; return !(c&&c.data&&Array.isArray(c.data.events)&&c.data.events.length); });
-  const queue=[...live,...doneUncached.slice(0,6)].slice(0,10);
+  const queue=[...live,...doneUncached.slice(0,12)].slice(0,16);
   if(!queue.length) return;
   _prefetching=true; let changed=false;
   for(const m of queue){ try{ const d=await fetchMatch(m.id,{live:m.s==="live"}); if(d&&Array.isArray(d.events)) changed=true; }catch(e){} }
   _prefetching=false;
-  if(changed){ renderMatches(); if(typeof renderBracketMap==="function") renderBracketMap(); }
+  if(changed){ renderMatches(); renderScorers(); if(typeof renderBracketMap==="function") renderBracketMap(); } // re-renderiza goleadores con el conteo por eventos
 }
 async function openMatch(id){
   const m=STATE.matches.find(x=>x.id===id); if(!m) return;
