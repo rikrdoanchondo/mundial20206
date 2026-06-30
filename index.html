@@ -1316,34 +1316,17 @@ function renderProjected(){
     <div class="proj-grid">${grid||'<div class="empty">Aún sin proyección.</div>'}</div>`;
 }
 /* ===================== MAPA INTERACTIVO DE ELIMINATORIAS ===================== */
-/* ganador de un nodo de bracket: por marcador y, si está empatado (KO a penales), por la bandera winner */
-function koWinner(nd){
-  if(!nd||!nd.done) return null;
-  if(nd.hs>nd.as) return nd.h;
-  if(nd.as>nd.hs) return nd.a;
-  if(nd.winner==="home") return nd.h;
-  if(nd.winner==="away") return nd.a;
-  return null;
-}
+/* El cuadro se llena con los partidos REALES que publica la API (traen el emparejamiento oficial,
+   incluida la asignación de los 8 mejores terceros). No se "adivina" el cruce de la siguiente ronda
+   por orden, porque el orden de la API no corresponde necesariamente al cuadro oficial de la FIFA. */
 function bracketData(){
   const cfg=[["r32",16],["r16",8],["qf",4],["sf",2],["f",1]];
-  const rounds=cfg.map(([key,n])=>{
+  return cfg.map(([key,n])=>{
     const ms=STATE.matches.filter(m=>m.r===key&&m.h&&m.h!=="?");
     const nodes=[];
     for(let i=0;i<n;i++){ const m=ms[i]; nodes.push(m?{h:m.h,a:m.a,hs:m.hs,as:m.as,s:m.s,id:m.id,winner:m.winner,done:(m.s==="done"||m.s==="live"),live:m.s==="live"}:null); }
     return {key,n,nodes};
   });
-  // Deriva el cruce de la siguiente ronda con los ganadores de la ronda previa (cuando la API
-  // aún no publicó el fixture). El nodo j se alimenta de los nodos 2j y 2j+1 de la ronda anterior.
-  for(let c=1;c<rounds.length;c++){
-    const prev=rounds[c-1].nodes, cur=rounds[c].nodes;
-    for(let j=0;j<cur.length;j++){
-      if(cur[j]) continue; // ya existe el partido real
-      const wa=koWinner(prev[2*j]), wb=koWinner(prev[2*j+1]);
-      if(wa||wb){ cur[j]={h:wa||"?",a:wb||"?",hs:null,as:null,s:"proj",id:null,winner:null,done:false,live:false,proj:true}; }
-    }
-  }
-  return rounds;
 }
 function bmNode(x,y,w,h,nd){
   const top=y-h/2;
