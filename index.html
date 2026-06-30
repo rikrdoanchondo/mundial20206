@@ -299,6 +299,8 @@
   .sc-player .nm{font-weight:600;font-size:.82rem} .sc-player .tm{font-size:.68rem;color:var(--muted)}
   .sc-num{font-family:'JetBrains Mono';text-align:center!important;font-size:.82rem}
   .sc-goals{font-family:'JetBrains Mono';font-weight:700;color:var(--grass);text-align:center!important}
+  .sc-live{color:var(--gold);font-size:.7rem;animation:pulse 1.8s infinite}
+  tr.sc-liverow{background:rgba(242,179,71,.06)}
   .scorer-empty{padding:34px 20px;text-align:center;color:var(--muted);font-size:.84rem}
 
   .ko-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px;margin-bottom:20px}
@@ -935,12 +937,16 @@ function assemble(data){
 }
 
 function computeKPIs(matches,standings){
-  let played=0,goals=0,preds=0;
-  for(const m of matches){ if(m.s==="done"){ played++; goals+=(m.hs||0)+(m.as||0); } else if(m.s==="pred"&&["j1","j2","j3"].includes(m.r)) preds++; }
+  let played=0,doneGoals=0,liveGoals=0,preds=0;
+  for(const m of matches){
+    if(m.s==="done"){ played++; doneGoals+=(m.hs||0)+(m.as||0); }
+    else if(m.s==="live"){ liveGoals+=(m.hs||0)+(m.as||0); } // cuenta también los goles de partidos en vivo
+    else if(m.s==="pred"&&["j1","j2","j3"].includes(m.r)) preds++;
+  }
   let perfect=0;
   for(const row of standings){ const pj=row.played||0; if(pj>0&&(row.points||0)===3*pj) perfect++; }
-  const gpp=played?(goals/played).toFixed(2):"0.00";
-  return {played,goals,preds,perfect,gpp};
+  const gpp=played?(doneGoals/played).toFixed(2):"0.00"; // promedio sobre partidos terminados
+  return {played,goals:doneGoals+liveGoals,preds,perfect,gpp};
 }
 
 /* ============================ STATE + RENDER ============================ */
@@ -1253,20 +1259,41 @@ function renderThirds(){
   }).join("");
   host.innerHTML=`<table class="thirds-table"><thead><tr><th>#</th><th class="tl">Tercer lugar</th><th>PJ</th><th>GF–GC</th><th>DIF</th><th>PTS</th><th>16vos</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
+/* Goleadores: base de la API + goles de partidos EN VIVO (desde los eventos cacheados), para que la
+   tabla refleje los goles del momento sin esperar a que el endpoint de goleadores de la API se actualice.
+   Se recalcula en cada render desde la base de la API (no se acumula entre llamadas). */
+function mergedScorers(){
+  const out=(STATE.scorers||[]).map(p=>({...p}));
+  const byKey={}; out.forEach(p=>{ byKey[norm(p.name||"")]=p; });
+  for(const m of STATE.matches){
+    if(m.s!=="live"||!m.id) continue;
+    const c=STATS_CACHE[m.id]; const evs=c&&c.data&&Array.isArray(c.data.events)?c.data.events:null;
+    if(!evs) continue;
+    for(const e of evs){
+      if(e.type!=="Goal"||/own/i.test(e.detail||"")) continue; // los autogoles no cuentan al goleador
+      const name=e.player; if(!name) continue;
+      const key=norm(name);
+      if(byKey[key]){ byKey[key].goals=(byKey[key].goals||0)+1; byKey[key]._live=true; }
+      else { byKey[key]={name,team:(toAbbr(e.team)||e.team),goals:1,assists:0,_live:true}; out.push(byKey[key]); }
+    }
+  }
+  return out.sort((a,b)=>(b.goals-a.goals)||((b.assists||0)-(a.assists||0)));
+}
 function renderScorers(){
   const wrap=document.getElementById("scorerWrap"), meta=document.getElementById("scorerMeta");
-  const list=(STATE.scorers||[]).slice().sort((a,b)=>(b.goals-a.goals)||(b.assists-a.assists)).slice(0,25);
+  const list=mergedScorers().slice(0,25);
   if(!list.length){
     meta.textContent="Disponible al conectar API-Football";
     wrap.innerHTML=`<div class="scorer-empty">⚽ La tabla de goleadores se llena automáticamente cuando el dashboard se conecta a API-Football (variable <b>APISPORTS_KEY</b> en Vercel).<br>Incluirá goles, asistencias, tiros, penales y tarjetas por jugador.</div>`;
     return;
   }
-  meta.textContent=`${list.length} máximos artilleros`;
+  const nLive=list.filter(p=>p._live).length;
+  meta.textContent=`${list.length} máximos artilleros${nLive?` · ${nLive} con gol en vivo`:''}`;
   const rows=list.map((p,i)=>{
     const ab=toAbbr(p.team)||p.team;
     const photo=p.photo?`<img src="${p.photo}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">`:`<span style="width:30px;height:30px;border-radius:50%;background:${cl(ab)};display:inline-block;flex-shrink:0"></span>`;
-    return `<tr><td class="sc-rank">${i+1}</td>
-      <td><div class="sc-player">${photo}<div><div class="nm">${p.name||"—"}</div><div class="tm">${nm(ab)}</div></div></div></td>
+    return `<tr${p._live?' class="sc-liverow"':''}><td class="sc-rank">${i+1}</td>
+      <td><div class="sc-player">${photo}<div><div class="nm">${p.name||"—"}${p._live?' <span class="sc-live" title="Anotó en un partido en vivo">●</span>':''}</div><div class="tm">${nm(ab)}</div></div></div></td>
       <td class="sc-goals">${p.goals||0}</td><td class="sc-num">${p.assists||0}</td>
       <td class="sc-num">${p.shotsOn??"–"}</td><td class="sc-num">${p.penalties??"–"}</td>
       <td class="sc-num">${p.appearances??"–"}</td></tr>`;
