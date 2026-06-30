@@ -1316,17 +1316,33 @@ function renderProjected(){
     <div class="proj-grid">${grid||'<div class="empty">Aún sin proyección.</div>'}</div>`;
 }
 /* ===================== MAPA INTERACTIVO DE ELIMINATORIAS ===================== */
-/* El cuadro se llena con los partidos REALES que publica la API (traen el emparejamiento oficial,
-   incluida la asignación de los 8 mejores terceros). No se "adivina" el cruce de la siguiente ronda
-   por orden, porque el orden de la API no corresponde necesariamente al cuadro oficial de la FIFA. */
+/* Arma el cuadro conectando cada partido con sus DOS partidos de origen reales: para un partido de
+   una ronda, sus orígenes son los partidos de la ronda anterior cuyos GANADORES son sus dos equipos.
+   Así, el cruce de 8vos queda siempre alineado y conectado con los 16vos que lo formaron, sin depender
+   del orden en que la API entregue los partidos. */
 function bracketData(){
   const cfg=[["r32",16],["r16",8],["qf",4],["sf",2],["f",1]];
-  return cfg.map(([key,n])=>{
-    const ms=STATE.matches.filter(m=>m.r===key&&m.h&&m.h!=="?");
-    const nodes=[];
-    for(let i=0;i<n;i++){ const m=ms[i]; nodes.push(m?{h:m.h,a:m.a,hs:m.hs,as:m.as,s:m.s,id:m.id,winner:m.winner,done:(m.s==="done"||m.s==="live"),live:m.s==="live"}:null); }
-    return {key,n,nodes};
-  });
+  const toNode=m=>({h:m.h,a:m.a,hs:m.hs,as:m.as,s:m.s,id:m.id,winner:m.winner,done:(m.s==="done"||m.s==="live"),live:m.s==="live"});
+  const winnerOf=nd=>{ if(!nd||!nd.done) return null; if(nd.hs>nd.as) return nd.h; if(nd.as>nd.hs) return nd.a; if(nd.winner==="home") return nd.h; if(nd.winner==="away") return nd.a; return null; };
+  const rounds=cfg.map(([key,n])=>({key,n,raw:STATE.matches.filter(m=>m.r===key&&m.h&&m.h!=="?").map(toNode),nodes:new Array(n).fill(null)}));
+  // ronda más avanzada con partidos publicados
+  let deep=0; for(let c=0;c<rounds.length;c++) if(rounds[c].raw.length) deep=c;
+  // coloca esa ronda en orden y baja conectando orígenes por ganador (los pone en slots adyacentes 2k,2k+1)
+  rounds[deep].raw.forEach((m,k)=>{ if(k<rounds[deep].n) rounds[deep].nodes[k]=m; });
+  for(let c=deep;c>=1;c--){
+    const prev=rounds[c-1], used=new Set();
+    for(let k=0;k<rounds[c].n;k++){
+      const M=rounds[c].nodes[k]; if(!M) continue;
+      const fH=prev.raw.find(x=>!used.has(x)&&winnerOf(x)===M.h);
+      const fA=prev.raw.find(x=>!used.has(x)&&winnerOf(x)===M.a);
+      if(fH){ prev.nodes[2*k]=fH; used.add(fH); }
+      if(fA){ prev.nodes[2*k+1]=fA; used.add(fA); }
+    }
+    // los partidos de la ronda previa sin destino aún publicado se acomodan en los slots libres
+    const rem=prev.raw.filter(x=>!used.has(x)); let ri=0;
+    for(let s=0;s<prev.n&&ri<rem.length;s++){ if(!prev.nodes[s]) prev.nodes[s]=rem[ri++]; }
+  }
+  return rounds.map(r=>({key:r.key,n:r.n,nodes:r.nodes}));
 }
 function bmNode(x,y,w,h,nd){
   const top=y-h/2;
