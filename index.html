@@ -1262,6 +1262,13 @@ function renderThirds(){
 /* Goleadores: base de la API + goles de partidos EN VIVO (desde los eventos cacheados), para que la
    tabla refleje los goles del momento sin esperar a que el endpoint de goleadores de la API se actualice.
    Se recalcula en cada render desde la base de la API (no se acumula entre llamadas). */
+/* Clave de jugador robusta a formatos distintos ("Kylian Mbappé" vs "K. Mbappe"): apellido + equipo */
+function scorerKey(name,team){
+  const n=norm(name);
+  const parts=n.split(" ").filter(x=>x.length>1); // descarta iniciales ("k", "o")
+  const last=parts.length?parts[parts.length-1]:n;
+  return last+"|"+(team||"");
+}
 function mergedScorers(){
   // Conteo desde TODOS los eventos de partidos cacheados (en vivo y terminados que se hayan cargado).
   const ev={};
@@ -1269,13 +1276,13 @@ function mergedScorers(){
     const c=STATS_CACHE[id]; const evs=c&&c.data&&Array.isArray(c.data.events)?c.data.events:null;
     if(!evs) continue;
     for(const e of evs){
-      if(e.type==="Goal"&&!/own/i.test(e.detail||"")&&e.player){ const k=norm(e.player); const o=ev[k]||(ev[k]={name:e.player,team:(toAbbr(e.team)||e.team),goals:0,assists:0}); o.goals++; } // autogoles no cuentan
+      if(e.type==="Goal"&&!/own/i.test(e.detail||"")&&e.player){ const t=(toAbbr(e.team)||e.team); const k=scorerKey(e.player,t); const o=ev[k]||(ev[k]={name:e.player,team:t,goals:0,assists:0}); o.goals++; } // autogoles no cuentan
     }
-    for(const e of evs){ if(e.type==="Goal"&&e.assist&&!/own/i.test(e.detail||"")){ const k=norm(e.assist); const o=ev[k]||(ev[k]={name:e.assist,team:(toAbbr(e.team)||e.team),goals:0,assists:0}); o.assists++; } }
+    for(const e of evs){ if(e.type==="Goal"&&e.assist&&!/own/i.test(e.detail||"")){ const t=(toAbbr(e.team)||e.team); const k=scorerKey(e.assist,t); const o=ev[k]||(ev[k]={name:e.assist,team:t,goals:0,assists:0}); o.assists++; } }
   }
   // Base de la API combinada con el conteo de eventos: por jugador se toma el MAYOR (corrige el atraso de la API).
   const out=(STATE.scorers||[]).map(p=>({...p}));
-  const byKey={}; out.forEach(p=>{ byKey[norm(p.name||"")]=p; });
+  const byKey={}; out.forEach(p=>{ byKey[scorerKey(p.name||"", toAbbr(p.team)||p.team)]=p; });
   for(const k in ev){
     const ep=ev[k];
     if(byKey[k]){
@@ -1476,32 +1483,38 @@ function saveStatsCache(){ try{ localStorage.setItem("mx2026_stats",JSON.stringi
 let modalTab="stats";
 
 async function fetchMatch(id,opts){
-  const live=!!(opts&&opts.live);
+  const live=!!(opts&&opts.live), eventsOnly=!!(opts&&opts.eventsOnly);
   const c=STATS_CACHE[id];
-  const ttl=live?18*1000:15*60*1000; // en vivo: refresca cada ~18 s (para que goles/tarjetas aparezcan pronto); terminado: 15 min
-  const hasData=c&&c.data&&((Array.isArray(c.data.stats)&&c.data.stats.length)||(Array.isArray(c.data.events)&&c.data.events.length));
-  const fresh=hasData&&(Date.now()-(c.ts||0)<ttl);
+  const ttl=live?18*1000:15*60*1000; // en vivo: refresca cada ~18 s; terminado: 15 min
+  // para detalle completo se exige tener stats/alineaciones (full); para solo-eventos basta con eventos
+  let enough=false;
+  if(c&&c.data){ enough = eventsOnly ? Array.isArray(c.data.events) : (c.full||(Array.isArray(c.data.stats)&&c.data.stats.length)||(Array.isArray(c.data.lineups)&&c.data.lineups.length)); }
+  const fresh=enough&&(Date.now()-(c.ts||0)<ttl);
   if(fresh) return c.data;
   try{
-    // ?live=1 indica al backend que use caché corta (no congelar el detalle por tener ya eventos)
-    const r=await fetch("/api/match?id="+id+(live?"&live=1":""),{cache:"no-store"});
-    if(r.ok){ const j=await r.json(); if(j&&j.ok){ STATS_CACHE[id]={ts:Date.now(),data:j}; saveStatsCache(); return j; } }
+    const r=await fetch("/api/match?id="+id+(live?"&live=1":"")+(eventsOnly?"&only=events":""),{cache:"no-store"});
+    if(r.ok){ const j=await r.json(); if(j&&j.ok){ STATS_CACHE[id]={ts:Date.now(),data:j,full:!eventsOnly}; saveStatsCache(); return j; } }
   }catch(e){}
   return c&&c.data?c.data:null;
 }
-/* Precarga eventos (goles/tarjetas) de partidos en vivo y terminados para mostrarlos en las tarjetas,
-   sin tener que abrir el modal. Acotado para no agotar la cuota de la API. */
+/* Precarga de eventos para tarjetas y goleadores, sin abrir el modal:
+   - detalle COMPLETO (3 llamadas) solo para partidos en vivo y unos pocos terminados (alimenta stats/predicciones)
+   - SOLO EVENTOS (1 llamada, barato) para el resto de terminados → completa el conteo de goleadores */
 let _prefetching=false;
 async function prefetchEvents(){
   if(_prefetching) return;
   const live=STATE.matches.filter(m=>m.id&&m.s==="live");
-  const doneUncached=STATE.matches.filter(m=>m.id&&m.s==="done").filter(m=>{ const c=STATS_CACHE[m.id]; return !(c&&c.data&&Array.isArray(c.data.events)&&c.data.events.length); });
-  const queue=[...live,...doneUncached.slice(0,12)].slice(0,16);
-  if(!queue.length) return;
+  const done=STATE.matches.filter(m=>m.id&&m.s==="done");
+  const needFull=m=>{ const c=STATS_CACHE[m.id]; return !(c&&c.full); };
+  const needEvents=m=>{ const c=STATS_CACHE[m.id]; return !(c&&c.data&&Array.isArray(c.data.events)); };
+  const fullQ=[...live, ...done.filter(needFull).slice(0,6)].slice(0,8);
+  const evQ=done.filter(needEvents).slice(0,24); // solo-eventos: barato, cubre muchos por ciclo
+  if(!fullQ.length&&!evQ.length) return;
   _prefetching=true; let changed=false;
-  for(const m of queue){ try{ const d=await fetchMatch(m.id,{live:m.s==="live"}); if(d&&Array.isArray(d.events)) changed=true; }catch(e){} }
+  for(const m of fullQ){ try{ const d=await fetchMatch(m.id,{live:m.s==="live"}); if(d) changed=true; }catch(e){} }
+  for(const m of evQ){ try{ const d=await fetchMatch(m.id,{eventsOnly:true}); if(d) changed=true; }catch(e){} }
   _prefetching=false;
-  if(changed){ renderMatches(); renderScorers(); if(typeof renderBracketMap==="function") renderBracketMap(); } // re-renderiza goleadores con el conteo por eventos
+  if(changed){ renderMatches(); renderScorers(); if(typeof renderBracketMap==="function") renderBracketMap(); }
 }
 async function openMatch(id){
   const m=STATE.matches.find(x=>x.id===id); if(!m) return;

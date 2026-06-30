@@ -36,10 +36,13 @@ export default async function handler(req, res) {
 
   try {
     const base = `https://${HOST}`;
+    // ?only=events: trae SOLO los eventos (1 llamada en vez de 3). Lo usa la precarga de goleadores
+    // para cachear de forma barata el conteo de goles de muchos partidos sin agotar la cuota.
+    const onlyEvents = String((req.query && req.query.only) || "") === "events";
     const [evRes, lnRes, stRes] = await Promise.all([
       fetch(`${base}/fixtures/events?fixture=${id}`, { headers }).catch(() => null),
-      fetch(`${base}/fixtures/lineups?fixture=${id}`, { headers }).catch(() => null),
-      fetch(`${base}/fixtures/statistics?fixture=${id}`, { headers }).catch(() => null),
+      onlyEvents ? Promise.resolve(null) : fetch(`${base}/fixtures/lineups?fixture=${id}`, { headers }).catch(() => null),
+      onlyEvents ? Promise.resolve(null) : fetch(`${base}/fixtures/statistics?fixture=${id}`, { headers }).catch(() => null),
     ]);
 
     const evJson = evRes ? await safeJson(evRes) : {};
