@@ -1356,31 +1356,39 @@ function renderProjected(){
     <div class="proj-grid">${grid||'<div class="empty">Aún sin proyección.</div>'}</div>`;
 }
 /* ===================== MAPA INTERACTIVO DE ELIMINATORIAS ===================== */
-/* Arma el cuadro conectando cada partido con sus DOS partidos de origen reales: para un partido de
-   una ronda, sus orígenes son los partidos de la ronda anterior cuyos GANADORES son sus dos equipos.
-   Así, el cruce de 8vos queda siempre alineado y conectado con los 16vos que lo formaron, sin depender
-   del orden en que la API entregue los partidos. */
+/* Arma el cuadro con la ESTRUCTURA OFICIAL de la Copa 2026 (árbol fijo por número de partido):
+   16vos 73–88 → 8vos 89–96 → 4tos 97–100 → semis 101–102 → final. Cada 16vos se identifica por las
+   posiciones de grupo de sus equipos (ej. Partido 79 = 1.º A vs mejor 3.º) y se coloca en su slot
+   oficial; las rondas siguientes se ubican siguiendo al ganador de su partido de origen. */
+const R32_TPL={ "2A|2B":73,"1E|3":74,"1F|2C":75,"1C|2F":76,"1I|3":77,"2E|2I":78,"1A|3":79,"1L|3":80,"1D|3":81,"1G|3":82,"2K|2L":83,"1H|2J":84,"1B|3":85,"1J|2H":86,"1K|3":87,"2D|2G":88 };
+const R32_SLOT={74:0,77:1,73:2,75:3,83:4,84:5,81:6,82:7,76:8,78:9,79:10,80:11,86:12,88:13,85:14,87:15};
 function bracketData(){
   const cfg=[["r32",16],["r16",8],["qf",4],["sf",2],["f",1]];
   const toNode=m=>({h:m.h,a:m.a,hs:m.hs,as:m.as,s:m.s,id:m.id,winner:m.winner,done:(m.s==="done"||m.s==="live"),live:m.s==="live"});
   const winnerOf=nd=>{ if(!nd||!nd.done) return null; if(nd.hs>nd.as) return nd.h; if(nd.as>nd.hs) return nd.a; if(nd.winner==="home") return nd.h; if(nd.winner==="away") return nd.a; return null; };
   const rounds=cfg.map(([key,n])=>({key,n,raw:STATE.matches.filter(m=>m.r===key&&m.h&&m.h!=="?").map(toNode),nodes:new Array(n).fill(null)}));
-  // ronda más avanzada con partidos publicados
-  let deep=0; for(let c=0;c<rounds.length;c++) if(rounds[c].raw.length) deep=c;
-  // coloca esa ronda en orden y baja conectando orígenes por ganador (los pone en slots adyacentes 2k,2k+1)
-  rounds[deep].raw.forEach((m,k)=>{ if(k<rounds[deep].n) rounds[deep].nodes[k]=m; });
-  for(let c=deep;c>=1;c--){
-    const prev=rounds[c-1], used=new Set();
-    for(let k=0;k<rounds[c].n;k++){
-      const M=rounds[c].nodes[k]; if(!M) continue;
-      const fH=prev.raw.find(x=>!used.has(x)&&winnerOf(x)===M.h);
-      const fA=prev.raw.find(x=>!used.has(x)&&winnerOf(x)===M.a);
-      if(fH){ prev.nodes[2*k]=fH; used.add(fH); }
-      if(fA){ prev.nodes[2*k+1]=fA; used.add(fA); }
+  // posición de cada equipo en su grupo (1/2/3) para identificar cada partido de 16vos
+  const teamPos={}, teamGrp={}, byG={};
+  for(const r of STATE.standings){ const g=grpName(r.group)||""; if(!/^[A-L]$/.test(g)) continue; (byG[g]=byG[g]||[]).push(r); }
+  for(const g in byG){ byG[g].slice().sort(cmpRow).forEach((r,i)=>{ const ab=toAbbr(r.team)||r.team; teamPos[ab]=i+1; teamGrp[ab]=g; }); }
+  const idOf=ab=>{ const p=teamPos[ab], g=teamGrp[ab]; if(!g||!p) return null; return (p===1||p===2)?(p+""+g):"3"; };
+  // 1) coloca los 16vos en su slot oficial según las posiciones de grupo de sus equipos
+  const r32=rounds[0], placed32=new Set();
+  for(const nd of r32.raw){
+    const i1=idOf(nd.h), i2=idOf(nd.a);
+    if(i1&&i2){ const num=R32_TPL[[i1,i2].sort().join("|")]; if(num&&R32_SLOT[num]!=null&&r32.nodes[R32_SLOT[num]]==null){ r32.nodes[R32_SLOT[num]]=nd; placed32.add(nd); } }
+  }
+  { const rem=r32.raw.filter(x=>!placed32.has(x)); let ri=0; for(let s=0;s<r32.n&&ri<rem.length;s++){ if(!r32.nodes[s]) r32.nodes[s]=rem[ri++]; } }
+  // 2) rondas siguientes: cada partido va al slot floor(slotOrigen/2), ubicando su origen por el ganador
+  for(let c=1;c<rounds.length;c++){
+    const prev=rounds[c-1], cur=rounds[c], winSlot={};
+    for(let s=0;s<prev.n;s++){ const w=winnerOf(prev.nodes[s]); if(w) winSlot[w]=s; }
+    const placed=new Set();
+    for(const nd of cur.raw){
+      let sf=winSlot[nd.h]; if(sf==null) sf=winSlot[nd.a];
+      if(sf!=null){ const slot=Math.floor(sf/2); if(cur.nodes[slot]==null){ cur.nodes[slot]=nd; placed.add(nd); } }
     }
-    // los partidos de la ronda previa sin destino aún publicado se acomodan en los slots libres
-    const rem=prev.raw.filter(x=>!used.has(x)); let ri=0;
-    for(let s=0;s<prev.n&&ri<rem.length;s++){ if(!prev.nodes[s]) prev.nodes[s]=rem[ri++]; }
+    const rem=cur.raw.filter(x=>!placed.has(x)); let ri=0; for(let s=0;s<cur.n&&ri<rem.length;s++){ if(!cur.nodes[s]) cur.nodes[s]=rem[ri++]; }
   }
   return rounds.map(r=>({key:r.key,n:r.n,nodes:r.nodes}));
 }
@@ -1508,7 +1516,7 @@ async function prefetchEvents(){
   const needFull=m=>{ const c=STATS_CACHE[m.id]; return !(c&&c.full); };
   const needEvents=m=>{ const c=STATS_CACHE[m.id]; return !(c&&c.data&&Array.isArray(c.data.events)); };
   const fullQ=[...live, ...done.filter(needFull).slice(0,6)].slice(0,8);
-  const evQ=done.filter(needEvents).slice(0,24); // solo-eventos: barato, cubre muchos por ciclo
+  const evQ=done.filter(needEvents).slice(0,40); // solo-eventos: barato (1 llamada c/u), cubre muchos por ciclo para completar pronto el conteo de goleadores
   if(!fullQ.length&&!evQ.length) return;
   _prefetching=true; let changed=false;
   for(const m of fullQ){ try{ const d=await fetchMatch(m.id,{live:m.s==="live"}); if(d) changed=true; }catch(e){} }
