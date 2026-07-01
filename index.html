@@ -1365,7 +1365,6 @@ const R32_SLOT={74:0,77:1,73:2,75:3,83:4,84:5,81:6,82:7,76:8,78:9,79:10,80:11,86
 function bracketData(){
   const cfg=[["r32",16],["r16",8],["qf",4],["sf",2],["f",1]];
   const toNode=m=>({h:m.h,a:m.a,hs:m.hs,as:m.as,s:m.s,id:m.id,winner:m.winner,done:(m.s==="done"||m.s==="live"),live:m.s==="live"});
-  const winnerOf=nd=>{ if(!nd||!nd.done) return null; if(nd.hs>nd.as) return nd.h; if(nd.as>nd.hs) return nd.a; if(nd.winner==="home") return nd.h; if(nd.winner==="away") return nd.a; return null; };
   const rounds=cfg.map(([key,n])=>({key,n,raw:STATE.matches.filter(m=>m.r===key&&m.h&&m.h!=="?").map(toNode),nodes:new Array(n).fill(null)}));
   // posición de cada equipo en su grupo (1/2/3) para identificar cada partido de 16vos
   const teamPos={}, teamGrp={}, byG={};
@@ -1379,13 +1378,14 @@ function bracketData(){
     if(i1&&i2){ const num=R32_TPL[[i1,i2].sort().join("|")]; if(num&&R32_SLOT[num]!=null&&r32.nodes[R32_SLOT[num]]==null){ r32.nodes[R32_SLOT[num]]=nd; placed32.add(nd); } }
   }
   { const rem=r32.raw.filter(x=>!placed32.has(x)); let ri=0; for(let s=0;s<r32.n&&ri<rem.length;s++){ if(!r32.nodes[s]) r32.nodes[s]=rem[ri++]; } }
-  // 2) rondas siguientes: cada partido va al slot floor(slotOrigen/2), ubicando su origen por el ganador
+  // 2) rondas siguientes: cada partido va al slot floor(slotOrigen/2). El origen se localiza por el
+  //    equipo que avanzó (en qué partido de la ronda previa jugó), robusto a definiciones por penales.
   for(let c=1;c<rounds.length;c++){
-    const prev=rounds[c-1], cur=rounds[c], winSlot={};
-    for(let s=0;s<prev.n;s++){ const w=winnerOf(prev.nodes[s]); if(w) winSlot[w]=s; }
+    const prev=rounds[c-1], cur=rounds[c], teamSlot={};
+    for(let s=0;s<prev.n;s++){ const nd=prev.nodes[s]; if(nd){ if(nd.h) teamSlot[nd.h]=s; if(nd.a) teamSlot[nd.a]=s; } }
     const placed=new Set();
     for(const nd of cur.raw){
-      let sf=winSlot[nd.h]; if(sf==null) sf=winSlot[nd.a];
+      let sf=teamSlot[nd.h]; if(sf==null) sf=teamSlot[nd.a];
       if(sf!=null){ const slot=Math.floor(sf/2); if(cur.nodes[slot]==null){ cur.nodes[slot]=nd; placed.add(nd); } }
     }
     const rem=cur.raw.filter(x=>!placed.has(x)); let ri=0; for(let s=0;s<cur.n&&ri<rem.length;s++){ if(!cur.nodes[s]) cur.nodes[s]=rem[ri++]; }
